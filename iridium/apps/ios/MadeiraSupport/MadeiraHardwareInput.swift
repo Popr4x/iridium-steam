@@ -3,14 +3,78 @@ import UIKit
 import MadeiraNative
 
 @MainActor enum MadeiraHardwareInput {
+    static var acceptingInput = false {
+        didSet {
+            if !acceptingInput {
+                for key in held { winios_post_key(key, 0) }
+                held.removeAll()
+                pointerCaptured = false
+            }
+        }
+    }
+
+    private static var keyboardEvents = 0
+    private static var keyboardDelivered = 0
+    static func key(hid: Int, pressed: Bool) {
+        keyboardEvents += 1
+        guard acceptingInput, UIApplication.shared.applicationState == .active,
+              let key = MadeiraKeys.virtualKey(hid: hid) else { return }
+        let changed = pressed ? held.insert(key).inserted : held.remove(key) != nil
+        if changed {
+            keyboardDelivered += 1
+            winios_post_key(key, pressed ? 1 : 0)
+        }
+    }
+
+    // Relative deltas and absolute UIKit locations must never drive the cursor together.
+    static var usesRawMouse: Bool {
+        acceptingInput && pointerCaptured && UIApplication.shared.applicationState == .active
+            && !UIAccessibility.isAssistiveTouchRunning
+    }
+
     static var pointerCaptured = false {
         didSet {
             if !pointerCaptured {
+                mouseRemainderX = 0
+                mouseRemainderY = 0
+                scrollRemainder = 0
                 for flag in heldMouse { winios_pointer(0, 0, flag << 1, 0) }
                 heldMouse.removeAll()
             }
         }
     }
+    static func mouseButton(flag: UInt32, pressed: Bool) {
+        guard acceptingInput, UIApplication.shared.applicationState == .active else { return }
+        let changed = pressed ? heldMouse.insert(flag).inserted : heldMouse.remove(flag) != nil
+        if changed { winios_pointer(0, 0, pressed ? flag : flag << 1, 0) }
+    }
+
+    private static var mouseRemainderX = 0.0
+    private static var mouseRemainderY = 0.0
+    static func scaledMouseDelta(x: Float, y: Float) -> (Int32, Int32) {
+        guard x.isFinite, y.isFinite else { return (0, 0) }
+        let stored = UserDefaults.standard.object(forKey: "IridiumMouseSensitivity") as? Double ?? 1
+        let sensitivity = stored.isFinite ? min(4, max(0.25, stored)) : 1
+        let dx = min(Double(Int32.max), max(Double(Int32.min), Double(x) * sensitivity + mouseRemainderX))
+        let dy = min(Double(Int32.max), max(Double(Int32.min), -Double(y) * sensitivity + mouseRemainderY))
+        let outputX = Int32(dx.rounded(.towardZero))
+        let outputY = Int32(dy.rounded(.towardZero))
+        mouseRemainderX = dx - Double(outputX)
+        mouseRemainderY = dy - Double(outputY)
+        return (outputX, outputY)
+    }
+
+    private static var scrollRemainder = 0.0
+    static func scaledScrollDelta(_ value: Float) -> Int32 {
+        guard value.isFinite else { return 0 }
+        let stored = UserDefaults.standard.object(forKey: "IridiumScrollSensitivity") as? Double ?? 1
+        let sensitivity = stored.isFinite ? min(4, max(0.25, stored)) : 1
+        let delta = min(Double(Int32.max), max(Double(Int32.min), Double(value) * 120 * sensitivity + scrollRemainder))
+        let output = Int32(delta.rounded(.towardZero))
+        scrollRemainder = delta - Double(output)
+        return output
+    }
+
     private static var observers: [NSObjectProtocol] = []
     private static var keyboard: GCKeyboardInput?
     private static var mice: [GCMouse] = []
@@ -47,6 +111,11 @@ import MadeiraNative
     }
 
     private static func unbind() {
+        if keyboardEvents > 0 {
+            RuntimeLogCapture.writeLine("[Launch] Keyboard input: received=\(keyboardEvents), forwarded=\(keyboardDelivered), held=\(held.count).")
+        }
+        keyboardEvents = 0
+        keyboardDelivered = 0
         mouseProbe?.invalidate()
         mouseProbe = nil
         keyboard?.keyChangedHandler = nil
@@ -69,11 +138,10 @@ import MadeiraNative
         unbind()
         guard UIApplication.shared.applicationState == .active else { return }
         keyboard = GCKeyboard.coalesced?.keyboardInput
-        keyboard?.keyChangedHandler = { _, _, code, pressed in
+        keyboard?.keyChangedHandler = { input, _, code, pressed in
             Task { @MainActor in
-                guard let key = MadeiraKeys.virtualKey(hid: Int(code.rawValue)) else { return }
-                if pressed { held.insert(key) } else { held.remove(key) }
-                winios_post_key(key, pressed ? 1 : 0)
+                guard keyboard === input else { return }
+                key(hid: Int(code.rawValue), pressed: pressed)
             }
         }
         loggedMouseMovement = false
@@ -93,8 +161,9 @@ import MadeiraNative
                         loggedMouseMovement = true
                         RuntimeLogCapture.writeLine("[Launch] Mouse movement callback received.")
                     }
-                    guard pointerCaptured else { return }
-                    winios_pointer(Int32(x.rounded()), Int32(-y.rounded()), 0x0001, 0)
+                    guard usesRawMouse, mice.contains(where: { $0 === mouse }) else { return }
+                    let (dx, dy) = scaledMouseDelta(x: x, y: y)
+                    if dx != 0 || dy != 0 { winios_pointer(dx, dy, 0x0001, 0) }
                 }
             }
             for (button, flag): (GCControllerButtonInput?, UInt32) in [(input.leftButton, 0x0002), (input.rightButton, 0x0008), (input.middleButton, 0x0020)] {
@@ -105,20 +174,20 @@ import MadeiraNative
                             loggedMouseButton = true
                             RuntimeLogCapture.writeLine("[Launch] Mouse button callback received.")
                         }
-                        guard pointerCaptured else { return }
-                        if pressed { heldMouse.insert(flag) } else { heldMouse.remove(flag) }
-                        winios_pointer(0, 0, pressed ? flag : flag << 1, 0)
+                        guard usesRawMouse, mice.contains(where: { $0 === mouse }) else { return }
+                        mouseButton(flag: flag, pressed: pressed)
                     }
                 }
             }
             input.scroll.valueChangedHandler = { _, _, y in
                 Task { @MainActor in
-                    guard pointerCaptured else { return }
-                    winios_pointer(0, 0, 0x0800, UInt32(bitPattern: Int32((y * 120).rounded())))
+                    guard usesRawMouse, mice.contains(where: { $0 === mouse }) else { return }
+                    let delta = scaledScrollDelta(y)
+                    if delta != 0 { winios_pointer(0, 0, 0x0800, UInt32(bitPattern: delta)) }
                 }
             }
         }
-        if !mice.isEmpty {
+        if !mice.isEmpty || keyboard != nil {
             let timer = Timer(timeInterval: 0.1, repeats: true) { _ in
                 MainActor.assumeIsolated { pollMouse() }
             }
@@ -139,6 +208,7 @@ import MadeiraNative
         if probeTicks > 0 && buttons != lastButtons { polledChanges += 1 }
         lastButtons = buttons
         if probeTicks % 50 == 0 {
+            RuntimeLogCapture.writeLine("[Launch] Keyboard input: received=\(keyboardEvents), forwarded=\(keyboardDelivered), held=\(held.count).")
             let handlers = profiles.filter { $0.mouseMovedHandler != nil && $0.leftButton.pressedChangedHandler != nil }.count
             RuntimeLogCapture.writeLine("[Launch] Mouse probe: devices=\(mice.count), profiles=\(profiles.count), handlers=\(handlers), moveCallbacks=\(mouseMoves), buttonCallbacks=\(mouseButtons), polledChanges=\(polledChanges), heldButtons=\(buttons.filter { $0 }.count), active=\(UIApplication.shared.applicationState == .active).")
         }

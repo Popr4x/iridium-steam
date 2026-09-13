@@ -13,11 +13,20 @@ Local modified source paths included in this snapshot:
 - `app/Madeira/StikJITHelper.swift`
 - `app/Madeira/WineProcessBridge.m`
 - `build/ntdll-unix/build.sh`
+- `build/ntdll-unix/signal_arm64_ios.c`: handle integer store-pair address updates in both exception paths.
+- `build/ntdll-unix/virtual_ios.c`: correct bitset indexing when retargeting thread-data reads in JIT code; remove unbounded diagnostic stack scans from allocation paths.
+- `build/win32u-unix/message_ios.c`: poll the iOS input ring during game message waits, preserving caller deadlines and WaitAll behavior.
+- `build/win32u-unix/driver_ios.c`: report input delivery errors and foreground-window changes beyond startup.
 - `build/wineserver/build.sh`
 
 Generated artifacts, personal paths, device identifiers, and local captures were excluded or sanitized where applicable.
 
 ## testrepos/Madeira/FEX
+
+Iridium uses an app-reserved host arena in Wine and FEX. The local rpmalloc
+change is supplied in `ci/patches/rpmalloc-host-arena.patch` and applied by
+`ci/prepare-runtime-inputs.sh`. FEX host allocations remain inside that arena.
+
 Upstream: https://github.com/willfaust/FEX
 Base revision: `053c385ecc9090702e4959a1d96752ea918a6110`
 

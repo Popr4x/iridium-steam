@@ -178,7 +178,7 @@ final class IridiumRuntimeHostSDKTests: XCTestCase {
         XCTAssertEqual(capabilities?["launchStatus"] as? String, "bootstrapReady")
         XCTAssertEqual(
             capabilities?["launchStatusSummary"] as? String,
-            "JIT and embedded bootstrap are ready; Wine server, Windows process, and first-frame milestones are not yet verified."
+            "JIT is ready. No game startup or rendered frame has been recorded."
         )
         XCTAssertEqual(capabilities?["jitSessionKind"] as? String, "debugger-backed")
         XCTAssertEqual(capabilities?["jitFailureStage"] as? String, nil)
@@ -188,7 +188,7 @@ final class IridiumRuntimeHostSDKTests: XCTestCase {
         XCTAssertEqual(capabilities?["jitToolBootstrapSummary"] as? String, nil)
         XCTAssertEqual(
             capabilities?["jitSummary"] as? String,
-            "JIT and embedded bootstrap are ready; Wine server, Windows process, and first-frame milestones are not yet verified."
+            "JIT is ready. No game startup or rendered frame has been recorded."
         )
         XCTAssertEqual(capabilities?["exceptionPortsActive"] as? Bool, false)
     }
@@ -356,7 +356,7 @@ final class IridiumRuntimeHostSDKTests: XCTestCase {
         XCTAssertEqual(capabilities?["launchStatus"] as? String, "bootstrapReady")
         XCTAssertEqual(
             capabilities?["launchStatusSummary"] as? String,
-            "JIT and embedded bootstrap are ready; Wine server, Windows process, and first-frame milestones are not yet verified."
+            "JIT is ready. No game startup or rendered frame has been recorded."
         )
         XCTAssertEqual(capabilities?["allocatorBackend"] as? String, "split-rx-rw-debugger")
         XCTAssertEqual(capabilities?["jitSessionKind"] as? String, "debugger-backed")
@@ -368,7 +368,7 @@ final class IridiumRuntimeHostSDKTests: XCTestCase {
         XCTAssertEqual(capabilities?["jitToolBootstrapRequired"] as? Bool, false)
         XCTAssertEqual(
             capabilities?["jitSummary"] as? String,
-            "JIT and embedded bootstrap are ready; Wine server, Windows process, and first-frame milestones are not yet verified."
+            "JIT is ready. No game startup or rendered frame has been recorded."
         )
         XCTAssertEqual(capabilities?["exceptionPortsActive"] as? Bool, false)
     }

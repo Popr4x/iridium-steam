@@ -19,8 +19,8 @@ Treat the repo-state fields below as a point-in-time snapshot that should be ref
 - Physical iOS now defaults to the debugger-owned split RX/RW allocator. The MAP_JIT backend is an explicit comparison/private-capability path, not the default sideloaded-app path.
 - TXM and OS version are separate runtime capabilities. On iOS 26, StikDebug enables the persistent `brk #0xf00d` callback for iPhone model 14,2 or newer and iPad model 14,5 or newer. On iOS 27, its current policy enables TXM handling on every supported model except `iPad8,11` and `iPad8,12`. Iridium mirrors that policy so non-TXM devices never execute an unhandled TXM breakpoint.
 - On TXM devices, each real FEX executable view is prepared through the StikDebug-compatible `brk #0xf00d` command before its writable alias is created. Iridium records the requested provider, targets the current PID, and fails before the breakpoint when the persistent StikDebug callback is absent or detached. A plain AltJIT, JitStreamer, or SideStore attach is insufficient for this TXM-specific path.
-- Readiness no longer reports success without performing a real allocation and write. Device execution may be skipped to avoid a destructive probe, but allocation/write evidence is mandatory.
-- Iridium no longer clears task/thread exception ports during normal debugger-backed launch; doing so disconnects the helper that owns JIT preparation. The legacy exception-port guard is diagnostic opt-in only.
+- Readiness requires a successful allocation and write. Device execution may be skipped to avoid a destructive probe, but allocation/write evidence is mandatory.
+- Normal debugger-backed launches preserve task/thread exception ports so the JIT helper stays connected. The legacy exception-port guard is diagnostic opt-in only.
 - The app entitlements match the sideloaded UTM-style model (`extended-virtual-addressing` and `increased-memory-limit`) instead of declaring the macOS-oriented `com.apple.security.cs.allow-jit` entitlement.
 - Host, `iphoneos`, and `iphonesimulator` FEX archives build from the pinned dependency set. The runtime SDK and app package graphs build without requiring every platform manifest merely to resolve the package.
 - Runtime bundle `2026.07.13-txm-provider` contains the rebuilt capability-driven translator artifact. Physical first-frame proof is still required; this source/build validation does not claim that the remaining Wine-grade syscall, TLS, thread, signal, graphics, and audio work is complete.
@@ -130,7 +130,7 @@ Primary files:
 - `/path/to/iridium/apps/ios/Iridium/AppViewModel.swift`
 - `/path/to/iridium/apps/ios/Iridium/Views/RootTabView.swift`
 
-The app shell is no longer the blocker. Preserve it unless a runtime/store contract truly requires a thin integration change.
+Keep app changes focused on the runtime and storage contracts they use.
 
 ### Sibling runtime repos
 
@@ -167,7 +167,7 @@ The app shell is no longer the blocker. Preserve it unless a runtime/store contr
 - the acceptance harness report artifact now embeds the full host capability snapshot so lab validation notes carry `launchReady`, `playabilityReady`, and subsystem readiness evidence alongside launch/session artifacts
 - the Wine bridge now enforces seeded direct-launch preparation and desktop-shell blocking for bundled userland
 - the FEX bridge now performs real runtime initialization and truthful session/terminal reporting instead of synthetic success
-- the FEX bridge no longer treats a ready StikDebug debugger-backed skip-probe session as an Xcode-only lightweight check during guest launch startup
+- the FEX bridge accepts ready StikDebug debugger-backed skip-probe sessions during guest startup
 - the runtime SDK now reports host capability and terminal outcomes honestly instead of defaulting to placeholder success
 - the app now surfaces the concrete embedded-runtime blocker in both `Runtime health` and `Launch readiness` instead of generic validation text
 - the bundled app runtime now stages a real Wine userland root into the packaged runtime bundle
@@ -221,11 +221,11 @@ Current concrete blockers:
 - The local playability contract can now report `playabilityReady = true` when the active playable session has live render, input, and audio services registered through the runtime SDK. This is a structural no-device gate, not proof that a real title renders on iPhone.
 - A debugger-backed StikDebug bootstrap-required state must not be treated as `Runtime ready.` by the host fallback; it remains `jitBootstrapRequired` until the helper bootstrap actually completes.
 - A ready StikDebug debugger-backed session must not be mislabeled as Xcode-attached merely because the unsafe execution probe was skipped on iOS; `iridium-fex-ios` now uses a non-Xcode skip-probe stage label and only blocks actual Xcode debug launches.
-- Simulator/device FEX slice selection is no longer the blocker: the verified matrix now resolves `build-iridium-ios-host`, `build-iridium-ios-iphoneos`, and `build-iridium-ios-iphonesimulator` explicitly and passes.
+- The verified FEX slice matrix resolves `build-iridium-ios-host`, `build-iridium-ios-iphoneos`, and `build-iridium-ios-iphonesimulator` explicitly and passes.
 - `iridium-runtime-sdk` now stages a real Wine userland root into the bundled runtime, so the remaining blockers are below payload assembly and build-time slice selection in the embedded FEX/Wine execution path itself.
-- The unresolved execution blockers are now beyond the deterministic host smoke path: complete Wine-grade signal/exception/syscall coverage, broader process/thread behavior, and full runtime TLS/thread setup for real applications. The current path enters embedded FEX/Wine, loads through `PT_INTERP`, suppresses the Wine preloader re-exec path, maps Wine shared data via the high-address fallback, allocates valid Wine syscall frames, maps the target PE directly, and no longer falls back through `start.exe` on `STATUS_IMAGE_NOT_AT_BASE`.
+- The unresolved execution blockers are now beyond the deterministic host smoke path: complete Wine-grade signal/exception/syscall coverage, broader process/thread behavior, and full runtime TLS/thread setup for real applications. The current path enters embedded FEX/Wine, loads through `PT_INTERP`, suppresses the Wine preloader re-exec path, maps Wine shared data via the high-address fallback, allocates valid Wine syscall frames, maps the target PE directly, and handles `STATUS_IMAGE_NOT_AT_BASE` through direct launch.
 - A deterministic x64 Windows `exit0.exe` built with local MinGW now completes on the arm64 Darwin host without simulators or test devices when the guarded native host `wineserver` hook is enabled. The latest verification completed 12 consecutive untraced runs under `/tmp/iridium-runtime-exit0-stackbasefix-*`; this is a host-only smoke gate and is not the final iOS process model.
-- Physical-device proof remains blocked in this environment because no attached iPhone/iPad lab target, no external JIT-enable path, and no licensed validation title are available from this workspace alone.
+- Physical-device validation requires a connected device, a working JIT provider, and a licensed game.
 
 ## Current workspace delta
 

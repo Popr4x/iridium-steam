@@ -7,6 +7,9 @@ trap 'rm -rf "$scratch"' EXIT
 xcrun swiftc "$root/Shared/JITMessages.swift" "$root/Tests/PairingCheck.swift" -o "$scratch/pairing-check"
 "$scratch/pairing-check"
 node "$root/Tests/script-check.js"
+python3 "$root/Tests/HandshakeCheck.py"
+xcrun clang -fobjc-arc -framework Foundation "$root/Tests/DecoderCheck.m" -o "$scratch/decoder-check"
+"$scratch/decoder-check"
 xcrun clang -fobjc-arc -fblocks -fsyntax-only -target arm64-apple-ios27.0 \
   -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" "$root/Host/JITExtension.m"
 if [ "$#" -gt 0 ]; then

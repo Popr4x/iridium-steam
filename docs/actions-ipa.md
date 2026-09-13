@@ -76,6 +76,19 @@ source, checksums, notices, build instructions, and signing instructions. See th
 
 ## Rebuild and relink a modified media library
 
+For a pinned archive supplied as `NAME.source-archive`, restore it into a fresh
+checkout without downloading it:
+
+```sh
+python3 ci/fetch-runtime-inputs.py --only gmp \
+  --source-archive /path/to/corresponding-source/gmp.source-archive
+```
+
+The command checks the pinned checksum and refuses to overwrite changed input.
+A missing or damaged supplied archive fails without a download fallback. This
+option restores one pinned archive; it does not restore the complete source
+package, vendor trees, or host tools.
+
 Use a separate working directory. Keep the original source archive, checksums
 and test app. Do not use a player's game folder or prefix as a build directory.
 Install Xcode and host tools separately; they are not supplied in the source

@@ -17,6 +17,16 @@ debian = load('debian_sources', 'collect-debian-sources.py')
 
 
 class RuntimeStagingTests(unittest.TestCase):
+    def test_packaged_runtime_rejects_wine_placeholder_translator(self):
+        with tempfile.TemporaryDirectory() as temp:
+            app = Path(temp)
+            translator = app / 'arm64ec-windows/xtajit64.dll'
+            translator.parent.mkdir()
+            translator.write_bytes(b'x64 emulation not implemented')
+            with patch.object(windows, 'check_pe'):
+                with self.assertRaisesRegex(ValueError, 'placeholder translator'):
+                    windows.check(app)
+
     def test_debian_owner_ignores_diversions_and_rejects_ambiguity(self):
         path = '/lib64/ld-linux-x86-64.so.2'
         output = (f'diversion by libc6 from: {path}\n'
@@ -65,10 +75,14 @@ class RuntimeStagingTests(unittest.TestCase):
             build, app = root / 'build', root / 'app'
             for name, machine, hybrid in [('ntdll', 0xaa64, True),
                                            ('vcruntime140_1', 0x8664, False),
-                                           ('native', 0xaa64, False)]:
+                                           ('native', 0xaa64, False),
+                                           ('apisetschema', 0xaa64, False)]:
                 path = build / 'dlls' / name / 'aarch64-windows' / (name + '.dll')
                 path.parent.mkdir(parents=True)
-                path.write_bytes(image(machine, hybrid))
+                data = image(machine, hybrid)
+                if name == 'apisetschema':
+                    data[328:336] = b'.apiset\0'
+                path.write_bytes(data)
             for folder, name in [('nls', 'l_intl.nls'), ('fonts', 'test.ttf')]:
                 (build / folder).mkdir()
                 (build / folder / name).write_bytes(b'resource')
@@ -86,9 +100,16 @@ class RuntimeStagingTests(unittest.TestCase):
                 windows.stage(build, app)
             for arch in windows.MACHINES:
                 windows.check_pe(app / f'{arch}-windows/ntdll.dll', arch)
+                windows.check_pe(app / f'{arch}-windows/apisetschema.dll', arch)
             self.assertTrue((app / 'arm64ec-windows/vcruntime140_1.dll').exists())
             self.assertFalse((app / 'aarch64-windows/vcruntime140_1.dll').exists())
             self.assertFalse((app / 'arm64ec-windows/native.dll').exists())
+            schema = app / 'arm64ec-windows/apisetschema.dll'
+            executable_schema = bytearray(schema.read_bytes())
+            struct.pack_into('<I', executable_schema, 104, 4096)
+            schema.write_bytes(executable_schema)
+            with self.assertRaisesRegex(ValueError, 'data-only'):
+                windows.check_pe(schema, 'arm64ec')
             broken = root / 'broken.dll'
             broken.write_bytes(image(0xaa64, True)[:600])
             with self.assertRaises(ValueError):

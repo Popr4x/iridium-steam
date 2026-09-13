@@ -1115,13 +1115,13 @@ public struct DefaultRuntimeValidationService: RuntimeValidationService {
             if snapshot.runtimeMilestoneVerificationPending {
                 notes.append(
                     snapshot.launchStatusSummary
-                        ?? "JIT and embedded bootstrap are ready; Wine server, Windows process, and first-frame milestones are not yet verified."
+                        ?? "JIT is ready. No game startup or rendered frame has been recorded."
                 )
             }
 
             if snapshot.playabilityReady == false {
                 notes.append(
-                    "Embedded launch bootstrap is ready, but the runtime is not yet playable on this host."
+                    "The runtime has not started its display, input, and audio services."
                 )
             }
 
@@ -1181,7 +1181,7 @@ public struct DefaultRuntimeValidationService: RuntimeValidationService {
                 } else {
                     notes.append(
                         snapshot.launchStatusSummary
-                            ?? "JIT is attached and the embedded bootstrap is ready; runtime execution is not yet verified through first frame."
+                            ?? "JIT is ready. No rendered game frame has been recorded."
                     )
                 }
             case .required:

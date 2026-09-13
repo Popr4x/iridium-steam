@@ -24,6 +24,16 @@ def pe_architectures(path):
     if data[pe:pe + 4] != b'PE\0\0':
         raise ValueError(f'Invalid PE header: {path.name}')
     machine, sections = unpack('<HH', pe + 4)
+    # Wine maps this table as data, not executable code. Both machine views
+    # need the same API-name mappings even when its PE header says ARM64.
+    if path.name.casefold() == 'apisetschema.dll':
+        optional_size, = unpack('<H', pe + 20)
+        section = pe + 24 + optional_size
+        if (sections != 1 or unpack('<I', pe + 28)[0] != 0
+                or unpack('<I', pe + 40)[0] != 0
+                or data[section:section + 8] != b'.apiset\0'):
+            raise ValueError('Invalid data-only API-set schema')
+        return set(MACHINES)
     if machine == 0xa64e:
         return {'aarch64', 'arm64ec'}
     if machine in MACHINES['arm64ec']:
@@ -94,9 +104,12 @@ def stage(build, app, source=None):
 
 def check(app):
     for architecture in MACHINES:
-        for name in ['ntdll.dll', 'kernel32.dll', 'kernelbase.dll', 'user32.dll', 'd3d11.dll', 'dxgi.dll', 'winemetal.dll']:
+        for name in ['apisetschema.dll', 'ntdll.dll', 'kernel32.dll', 'kernelbase.dll', 'user32.dll', 'd3d11.dll', 'dxgi.dll', 'winemetal.dll']:
             check_pe(app / f'{architecture}-windows' / name, architecture)
-    check_pe(app / 'arm64ec-windows/xtajit64.dll', 'arm64ec')
+    translator = app / 'arm64ec-windows/xtajit64.dll'
+    check_pe(translator, 'arm64ec')
+    if b'x64 emulation not implemented' in translator.read_bytes():
+        raise ValueError('Wine placeholder translator packaged instead of FEX; run prepare-windows-runtime.sh')
     for path in ['prefix-template.tar.gz', 'nls/l_intl.nls']:
         if not (app / path).is_file() or not (app / path).stat().st_size:
             raise ValueError(f'Missing runtime resource: {path}')

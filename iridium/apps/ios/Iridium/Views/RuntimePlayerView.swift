@@ -50,21 +50,23 @@ struct RuntimePlayerView: View {
     @State private var startupEvents: [String] = []
     @State private var totalLogEntries = 0
     @State private var launchEvents: [String] = []
-    @State private var controlsVisible = true
+    @State private var controlsVisible = false
     @State private var isShowingDiagnostics = false
     @State private var isShowingControls = false
     @State private var showPerformance = true
+    @AppStorage("IridiumMouseSensitivity") private var mouseSensitivity = 1.0
+    @AppStorage("IridiumScrollSensitivity") private var scrollSensitivity = 1.0
     @State private var isConfirmingClose = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { safeGeometry in
-        ControllerMenuHost(nativeNavigation: controlsVisible || isShowingControls || isShowingDiagnostics || isConfirmingClose, backAction: {
+        ControllerMenuHost(nativeNavigation: controlsVisible || isShowingControls || isShowingDiagnostics || isConfirmingClose, backAction: (controlsVisible || isShowingControls || isShowingDiagnostics || isConfirmingClose) ? {
             if isConfirmingClose { isConfirmingClose = false }
             else if isShowingControls { isShowingControls = false }
             else if isShowingDiagnostics { isShowingDiagnostics = false }
-            else { controlsVisible.toggle() }
-        }, fullScreen: true) {
+            else { controlsVisible = false }
+        } : nil, fullScreen: true) {
         Group {
             if let bridgeConfiguration = presentationConfiguration ?? viewModel.runtimePlayerBridgeConfiguration(
                 for: session.sessionIdentifier
@@ -111,11 +113,30 @@ struct RuntimePlayerView: View {
                             Button {
                                 withOptionalAnimation { controlsVisible.toggle() }
                             } label: { Image(systemName: "ellipsis").frame(width: 44, height: 44) }
-                            .modifier(PlayerGlassButton()).accessibilityLabel("Player Menu")
+                            .modifier(PlayerGlassButton()).focusable(false).accessibilityLabel("Player Menu")
                             if controlsVisible {
+                                ScrollView {
                                 VStack(alignment: .leading, spacing: 6) {
                                     Button("Resume", systemImage: "play") { controlsVisible = false }.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                                     Button("Controls", systemImage: "gamecontroller") { isShowingControls = true; controlsVisible = false }.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                                    #if MADEIRA_RUNTIME
+                                    Stepper(value: $mouseSensitivity, in: 0.25...4, step: 0.25) {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Mouse sensitivity")
+                                            Text(mouseSensitivity.formatted(.number.precision(.fractionLength(2))) + "×")
+                                                .font(.caption).monospacedDigit()
+                                        }
+                                    }
+                                    .accessibilityIdentifier("mouseSensitivity")
+                                    Stepper(value: $scrollSensitivity, in: 0.25...4, step: 0.25) {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Scroll sensitivity")
+                                            Text(scrollSensitivity.formatted(.number.precision(.fractionLength(2))) + "×")
+                                                .font(.caption).monospacedDigit()
+                                        }
+                                    }
+                                    .accessibilityIdentifier("scrollSensitivity")
+                                    #endif
                                     Toggle("Performance", isOn: $showPerformance).frame(minHeight: 44)
                                     Button("View Log", systemImage: "doc.text") { isShowingDiagnostics = true; controlsVisible = false }.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                                     Button("Close Game", systemImage: "xmark", role: .destructive) { isConfirmingClose = true }.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
@@ -124,6 +145,9 @@ struct RuntimePlayerView: View {
                                 .controlSize(.large)
                                 .frame(width: 250, alignment: .leading)
                                 .padding(16)
+                                }
+                                .scrollBounceBehavior(.basedOnSize)
+                                .frame(width: 282, height: min(410, max(100, safeGeometry.size.height - safeGeometry.safeAreaInsets.top - safeGeometry.safeAreaInsets.bottom - 80)))
                                 .modifier(PlayerGlassPanel())
                                 .accessibilityIdentifier("playerMenuPanel")
                                 .contentShape(Rectangle()).onTapGesture {}
@@ -137,7 +161,7 @@ struct RuntimePlayerView: View {
                         if !hasPresentedFirstFrame && !controlsVisible {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("Starting game…").font(.headline)
-                                Text(launchEvents.last ?? "Preparing the runtime. The game has not shown a frame yet.")
+                                Text(launchEvents.last ?? "Preparing the game…")
                                     .font(.footnote).lineLimit(3)
                             }.padding(16).frame(maxWidth: 280, alignment: .leading)
                                 .modifier(PlayerGlassPanel())
@@ -252,7 +276,9 @@ struct RuntimePlayerView: View {
                 }
                 .onChange(of: controlsVisible) { _, _ in updatePointerCapture() }
                 .onKeyPress(.escape) {
-                    controlsVisible.toggle(); return .handled
+                    guard controlsVisible else { return .ignored }
+                    controlsVisible = false
+                    return .handled
                 }
                 .sheet(isPresented: $isShowingControls) {
                     NavigationStack {
@@ -295,7 +321,7 @@ struct RuntimePlayerView: View {
                         Text("Runtime Player")
                             .font(.headline.weight(.semibold))
                             .foregroundStyle(.white)
-                        Text("Closing the fullscreen runtime player.")
+                        Text("Closing game…")
                             .font(.footnote)
                             .foregroundStyle(.white.opacity(0.7))
                     }
@@ -510,9 +536,10 @@ private final class RuntimePlayerHostView: UIView {
             madeiraLayer.device = MTLCreateSystemDefaultDevice()
             madeiraLayer.pixelFormat = .bgra8Unorm
             madeiraLayer.framebufferOnly = true
-            madeiraLayer.drawableSize = CGSize(width: 960, height: 540)
+            madeiraLayer.drawableSize = MadeiraResolution.selected.size
             layer.addSublayer(madeiraLayer)
             madeira_display_set_layer(madeiraLayer)
+            addInteraction(UIPointerInteraction(delegate: self))
         }
         #endif
     }
@@ -536,6 +563,7 @@ private final class RuntimePlayerHostView: UIView {
         #if MADEIRA_RUNTIME
         if MadeiraRuntimeAdapter.enabled {
             madeiraLayer.frame = bounds
+            winios_cursor_attach(madeiraLayer)
         }
         #endif
     }
@@ -544,7 +572,7 @@ private final class RuntimePlayerHostView: UIView {
         super.didMoveToWindow()
         if window == nil {
             #if MADEIRA_RUNTIME
-            if MadeiraRuntimeAdapter.enabled { MadeiraHardwareInput.stop() }
+            if MadeiraRuntimeAdapter.enabled { MadeiraHardwareInput.stop(); winios_cursor_attach(nil) }
             #endif
             stopDisplayLink()
         } else {
@@ -558,7 +586,12 @@ private final class RuntimePlayerHostView: UIView {
 
     override var keyCommands: [UIKeyCommand]? {
         #if MADEIRA_RUNTIME
-        if MadeiraRuntimeAdapter.enabled { return [] }
+        if MadeiraRuntimeAdapter.enabled {
+            guard MadeiraHardwareInput.acceptingInput else { return [] }
+            let escape = UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(consumeGameEscape))
+            escape.wantsPriorityOverSystemBehavior = true
+            return [escape]
+        }
         #endif
         return [
             UIKeyCommand(input: UIKeyCommand.inputUpArrow, modifierFlags: [], action: #selector(handleKeyCommand(_:))),
@@ -574,6 +607,11 @@ private final class RuntimePlayerHostView: UIView {
             UIKeyCommand(input: "d", modifierFlags: [], action: #selector(handleKeyCommand(_:))),
         ]
     }
+
+    #if MADEIRA_RUNTIME
+    // GCKeyboard and pressesBegan/Ended deliver the key. Consume its system action only.
+    @objc private func consumeGameEscape() {}
+    #endif
 
     func updateConfiguration(_ configuration: RuntimePlayerBridgeConfiguration, isRunning: Bool) {
         let runningChanged = self.isRunning != isRunning
@@ -602,22 +640,22 @@ private final class RuntimePlayerHostView: UIView {
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        appendTouches(touches, phase: "began")
+        appendTouches(touches, phase: "began", event: event)
         super.touchesBegan(touches, with: event)
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        appendTouches(touches, phase: "moved")
+        appendTouches(touches, phase: "moved", event: event)
         super.touchesMoved(touches, with: event)
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        appendTouches(touches, phase: "ended")
+        appendTouches(touches, phase: "ended", event: event)
         super.touchesEnded(touches, with: event)
     }
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-        appendTouches(touches, phase: "cancelled")
+        appendTouches(touches, phase: "cancelled", event: event)
         super.touchesCancelled(touches, with: event)
     }
 
@@ -629,6 +667,11 @@ private final class RuntimePlayerHostView: UIView {
     override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         appendPresses(presses, phase: "up")
         super.pressesEnded(presses, with: event)
+    }
+
+    override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        appendPresses(presses, phase: "up")
+        super.pressesCancelled(presses, with: event)
     }
 
     @objc
@@ -835,18 +878,31 @@ private final class RuntimePlayerHostView: UIView {
 
     #if MADEIRA_RUNTIME
     @objc private func pointerHovered(_ recognizer: UIHoverGestureRecognizer) {
-        guard MadeiraRuntimeAdapter.enabled, isRunning, !MadeiraHardwareInput.pointerCaptured,
-              recognizer.state == .began || recognizer.state == .changed else { return }
-        let point = recognizer.location(in: self)
+        guard recognizer.state == .began || recognizer.state == .changed else { return }
+        moveSystemPointer(to: recognizer.location(in: self))
+    }
+
+    private var loggedSystemPointer = false
+    fileprivate func moveSystemPointer(to point: CGPoint) {
+        guard MadeiraRuntimeAdapter.enabled, isRunning, MadeiraHardwareInput.acceptingInput,
+              !MadeiraHardwareInput.usesRawMouse else { return }
         let size = madeiraLayer.drawableSize
         if let (x, y) = MadeiraPointerContact.position(
             x: Double(point.x / max(bounds.width, 1)), y: Double(point.y / max(bounds.height, 1)),
             width: Double(size.width), height: Double(size.height)
-        ) { winios_pointer(x, y, 0x8001, 0) }
+        ) {
+            winios_pointer(x, y, 0x8001, 0)
+            if !loggedSystemPointer {
+                loggedSystemPointer = true
+                RuntimeLogCapture.writeLine("[Launch] UIKit pointer position received; absolute mouse routing active.")
+            }
+        }
     }
     #endif
 
-    private func appendTouches(_ touches: Set<UITouch>, phase: String) {
+    private var pointerButtons: [UInt64: UInt32] = [:]
+
+    private func appendTouches(_ touches: Set<UITouch>, phase: String, event: UIEvent?) {
         guard isRunning else {
             return
         }
@@ -854,7 +910,22 @@ private final class RuntimePlayerHostView: UIView {
         #if MADEIRA_RUNTIME
         if MadeiraRuntimeAdapter.enabled {
             for touch in touches {
-                if touch.type == .indirectPointer && MadeiraHardwareInput.pointerCaptured { continue }
+                if touch.type == .indirectPointer {
+                    let id = UInt64(UInt(bitPattern: Unmanaged.passUnretained(touch).toOpaque()))
+                    // UIKit can deliver trackpad buttons even when GCMouse does not.
+                    // Keep absolute coordinates out of the relative mouse path.
+                    moveSystemPointer(to: touch.location(in: self))
+                    if phase == "began" {
+                        let flag: UInt32 = event?.buttonMask.contains(.secondary) == true ? 0x0008 : 0x0002
+                        pointerButtons[id] = flag
+                        MadeiraHardwareInput.mouseButton(flag: flag, pressed: true)
+                    } else if phase == "ended" || phase == "cancelled" {
+                        if let flag = pointerButtons.removeValue(forKey: id) {
+                            MadeiraHardwareInput.mouseButton(flag: flag, pressed: false)
+                        }
+                    }
+                    continue
+                }
                 let point = touch.location(in: self)
                 let size = madeiraLayer.drawableSize
                 guard let (x, y) = MadeiraPointerContact.position(
@@ -938,7 +1009,14 @@ private final class RuntimePlayerHostView: UIView {
         }
 
         #if MADEIRA_RUNTIME
-        if MadeiraRuntimeAdapter.enabled { return }
+        if MadeiraRuntimeAdapter.enabled {
+            for press in presses {
+                if let key = press.key {
+                    MadeiraHardwareInput.key(hid: Int(key.keyCode.rawValue), pressed: phase == "down")
+                }
+            }
+            return
+        }
         #endif
         for press in presses {
             inputBridge.appendKeyboard(name: keyName(for: press.type), phase: phase)
@@ -1312,4 +1390,19 @@ private final class RuntimePlayerControllerBridge {
 }
 #endif
 
+#endif
+
+#if MADEIRA_RUNTIME
+extension RuntimePlayerHostView: UIPointerInteractionDelegate {
+    func pointerInteraction(_ interaction: UIPointerInteraction, regionFor request: UIPointerRegionRequest,
+                            defaultRegion: UIPointerRegion) -> UIPointerRegion? {
+        moveSystemPointer(to: request.location)
+        return defaultRegion
+    }
+
+    func pointerInteraction(_ interaction: UIPointerInteraction, styleFor region: UIPointerRegion) -> UIPointerStyle? {
+        // Wine owns cursor appearance and visibility inside the game image.
+        return UIPointerStyle.hidden()
+    }
+}
 #endif

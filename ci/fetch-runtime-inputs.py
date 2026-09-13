@@ -46,11 +46,12 @@ def unpack(archive, target, archive_root):
         source.rename(target)
 
 
-def fetch(root, entry):
+def fetch(root, entry, source_archive=None):
     target = destination(root, entry)
-    archive = root / ".build/runtime-downloads" / (entry["sha256"] + ".tar")
-    archive.parent.mkdir(parents=True, exist_ok=True)
-    if not archive.exists():
+    archive = source_archive if source_archive is not None else root / ".build/runtime-downloads" / (entry["sha256"] + ".tar")
+    if source_archive is None:
+        archive.parent.mkdir(parents=True, exist_ok=True)
+    if source_archive is None and not archive.exists():
         with tempfile.NamedTemporaryFile(dir=archive.parent, delete=False) as temp:
             temporary = Path(temp.name)
             try:
@@ -63,7 +64,7 @@ def fetch(root, entry):
             finally:
                 temporary.unlink(missing_ok=True)
     if digest(archive) != entry["sha256"]:
-        raise ValueError(f"Cached input digest mismatch: {entry['name']}")
+        raise ValueError(f"Input digest mismatch: {entry['name']}")
     if "archive_root" in entry:
         unpack(archive, target, entry["archive_root"])
     else:
@@ -79,7 +80,10 @@ if __name__ == "__main__":
     parser.add_argument("--plan", action="store_true", help="List inputs without downloading or changing files")
     entries = json.loads((ROOT / "ci/runtime-inputs.json").read_text())
     parser.add_argument("--only", choices=[entry["name"] for entry in entries])
+    parser.add_argument("--source-archive", type=Path, help="Use a supplied archive without downloading; requires --only")
     args = parser.parse_args()
+    if args.source_archive is not None and not args.only:
+        parser.error('--source-archive requires --only')
     if args.only:
         entries = [entry for entry in entries if entry["name"] == args.only]
     for entry in entries:
@@ -87,4 +91,4 @@ if __name__ == "__main__":
         if args.plan:
             print(f"{entry['name']}: {entry['url']} -> {entry['destination']}")
         else:
-            fetch(ROOT, entry)
+            fetch(ROOT, entry, args.source_archive)

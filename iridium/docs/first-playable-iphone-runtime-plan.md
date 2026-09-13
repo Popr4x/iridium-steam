@@ -19,7 +19,7 @@ The current state is structurally closer to playable, but physical-device playab
 - Local tests prove the host capability snapshot can become `playabilityReady = true` from live session-bound services and returns to missing-service state after release.
 - No physical iPhone run has proven that a Windows executable renders a first frame, receives input, or initializes audio through the bundled local runtime path.
 
-The current blocker is not JIT detection or the absence of a service registry. The blocker is proving the registry-backed app/player/Wine/FEX path against a real title on physical iPhone hardware.
+Validate the registry-backed app/player/Wine/FEX path with a game on a physical iPhone.
 
 ## 2. Problem statement
 
@@ -167,7 +167,7 @@ Acceptance for Workstream B:
 - session transitions from `.running` to `.completed` or `.failed` update UI and history without crashing or orphaning the session
 
 Status:
-- Partially landed. The app has explicit runtime player session ownership and release paths. Physical-device running-session behavior remains unverified.
+- Verify session ownership and release during a physical-device run.
 
 ### Workstream C: Runtime player screen
 
@@ -210,7 +210,7 @@ Acceptance for Workstream C:
 - terminal failures dismiss cleanly and leave history/activity coherent
 
 Status:
-- Structurally landed in the app with a fullscreen runtime player and bridge handles. First-frame rendering, input delivery, and audio behavior from a real Windows title remain unverified on device.
+- Verify first-frame rendering, input delivery, and audio with a Windows game on the device.
 
 ### Workstream D: Wine iOS runtime driver
 

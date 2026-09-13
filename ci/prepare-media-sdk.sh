@@ -34,18 +34,21 @@ PACKAGING_PYTHON="$ROOT/.build/media-packaging/bin/python3"
 python3 -m venv "$ROOT/.build/media-packaging"
 "$PACKAGING_PYTHON" -m pip install --disable-pip-version-check 'setuptools==80.9.0'
 python3 "$ROOT/ci/check-media-toolchain.py" "$CERBERO" "$CONFIG"
-git -C "$ROOT" apply --check --directory=.build/runtime-sources/cerbero "$ROOT/ci/patches/cerbero-gperf-cxx14.patch"
-git -C "$ROOT" apply --check --directory=.build/runtime-sources/cerbero "$ROOT/ci/patches/cerbero-assets-library.patch"
-if git -C "$ROOT" apply --check --directory=.build/runtime-sources/cerbero "$ROOT/ci/patches/cerbero-source-manifest.patch" 2>/dev/null; then
-    git -C "$ROOT" apply --directory=.build/runtime-sources/cerbero "$ROOT/ci/patches/cerbero-source-manifest.patch"
-else
-    git -C "$ROOT" apply --reverse --check --directory=.build/runtime-sources/cerbero "$ROOT/ci/patches/cerbero-source-manifest.patch"
-fi
+apply_source_patch() {
+    local patch="$ROOT/ci/patches/$1"
+    if git -C "$ROOT" apply --check --directory=.build/runtime-sources/cerbero "$patch" 2>/dev/null; then
+        git -C "$ROOT" apply --directory=.build/runtime-sources/cerbero "$patch"
+    else
+        git -C "$ROOT" apply --reverse --check --directory=.build/runtime-sources/cerbero "$patch"
+    fi
+}
+# Supplied source already includes these patches. Reject any other patch state.
+for patch in cerbero-gperf-cxx14.patch cerbero-assets-library.patch cerbero-source-manifest.patch; do
+    apply_source_patch "$patch"
+done
 "$PACKAGING_PYTHON" "$ROOT/ci/check-media-source-package.py" "$CERBERO"
 [ "${1:-}" != --preflight ] || exit 0
 cd "$CERBERO"
-git -C "$ROOT" apply --directory=.build/runtime-sources/cerbero "$ROOT/ci/patches/cerbero-gperf-cxx14.patch"
-git -C "$ROOT" apply --directory=.build/runtime-sources/cerbero "$ROOT/ci/patches/cerbero-assets-library.patch"
 python3 cerbero-uninstalled -c config/cross-ios-arm64.cbc -c "$CONFIG" \
     bootstrap --assume-yes --jobs "$JOBS"
 python3 cerbero-uninstalled -c config/cross-ios-arm64.cbc -c "$CONFIG" \

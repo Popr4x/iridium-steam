@@ -93,7 +93,9 @@ def check_restored_sources():
     with tarfile.open(OUT / 'cerbero-1.28.6.tar.xz') as archive:
         names = {m.name.split('/', 1)[1] for m in archive if m.isfile() and '/' in m.name}
         required = {'cerbero-uninstalled', 'config/cross-ios-arm64.cbc',
-                    'recipes/build-tools/gperf.recipe', 'packages/gstreamer-1.0-core.package'}
+                    'recipes/build-tools/gperf.recipe', 'packages/gstreamer-1.0-core.package',
+                    'data/mobile/FindGStreamerMobile.cmake', 'data/mobile/gst_ios_init.m.in',
+                    'data/xcode/templates/ios/GStreamer Base.xctemplate/gst_ios_init.m'}
         missing = required - names
         if missing:
             raise ValueError('Restored Cerbero source lacks build inputs: ' + ', '.join(sorted(missing)))

@@ -71,7 +71,7 @@ def repair_cargo(path):
 def repair_cerbero(path, source, patches):
     with tempfile.TemporaryDirectory() as directory:
         clean = Path(directory)
-        for name in ('recipes', 'packages', 'config', 'tools'):
+        for name in ('recipes', 'packages', 'config', 'tools', 'data'):
             shutil.copytree(source / name, clean / name, ignore=shutil.ignore_patterns('__pycache__'))
         shutil.copy2(source / 'cerbero-uninstalled', clean / 'cerbero-uninstalled')
         for patch in patches:

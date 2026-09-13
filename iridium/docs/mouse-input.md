@@ -20,8 +20,7 @@ the application's overall interface idiom. This is an experimental compatibility
 approach; iOS may still decline capture or deliver no events.
 
 When unlocked, UIKit hover and pointer/touch contacts go directly to the Wine
-input queue. Previously these contacts were written to the legacy runtime file,
-which Madeira does not consume. The fallback handles one contact at a time,
+input queue. The fallback handles one contact at a time,
 releases on cancellation/teardown, and clamps coordinates to the drawable.
 AssistiveTouch must be enabled by the user in Settings; Iridium never changes
 that setting. Its fallback may require click-and-drag for camera movement and

@@ -995,7 +995,7 @@ final class IridiumAppSupportTests: XCTestCase {
         )
 
         let status = try XCTUnwrap(viewModel.presentationStatus(for: fixture.game))
-        XCTAssertEqual(status.title, "Not Playable Yet")
+        XCTAssertEqual(status.title, "Runtime Not Ready")
         XCTAssertEqual(status.tone, .warning)
         XCTAssertTrue(status.summary.contains("presentation and audio support"))
     }
@@ -1777,7 +1777,7 @@ private func degradedPlayabilityRuntimeHealth() -> RuntimeHealthReport {
     RuntimeHealthReport(
         status: .degraded,
         runtimeName: "Iridium Runtime Base",
-        notes: ["Embedded launch bootstrap is ready, but the runtime is not yet playable on this host."]
+        notes: ["The runtime has not started its display, input, and audio services."]
     )
 }
 

@@ -32,7 +32,7 @@ with tempfile.TemporaryDirectory(prefix='iridium-source-check-') as temp:
         required = {'cerbero-uninstalled', 'config/cross-ios-arm64.cbc',
                     'recipes/build-tools/gperf.recipe', 'packages/gstreamer-1.0-core.package'}
         # Compare the complete recipe/config inputs, including nested patches.
-        for directory in ('recipes', 'packages', 'config', 'tools'):
+        for directory in ('recipes', 'packages', 'config', 'tools', 'data'):
             required.update(str(p.relative_to(source)) for p in (source / directory).rglob('*')
                             if p.is_file() and '__pycache__' not in p.parts)
         missing = required - names

@@ -26,8 +26,11 @@ class RepairTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / 'source'
-            for name in ('recipes', 'packages', 'config', 'tools'):
+            for name in ('recipes', 'packages', 'config', 'tools', 'data'):
                 (source / name).mkdir(parents=True)
+            template = source / 'data/mobile/gst_ios_init.m.in'
+            template.parent.mkdir(parents=True)
+            template.write_bytes(b'@GST_IOS_PLUGINS_DECLARE@')
             launcher = source / 'cerbero-uninstalled'
             launcher.write_bytes(b'launcher')
             launcher.chmod(0o755)
@@ -36,9 +39,10 @@ class RepairTests(unittest.TestCase):
                 member = tarfile.TarInfo('cerbero-1.28.6/original')
                 member.size = 4
                 archive.addfile(member, io.BytesIO(b'keep'))
-            self.assertEqual(repair.repair_cerbero(target, source, []), 1)
+            self.assertEqual(repair.repair_cerbero(target, source, []), 2)
             with tarfile.open(target) as archive:
                 self.assertEqual(archive.extractfile('cerbero-1.28.6/original').read(), b'keep')
+                self.assertEqual(archive.extractfile('cerbero-1.28.6/data/mobile/gst_ios_init.m.in').read(), template.read_bytes())
                 self.assertEqual(archive.getmember('cerbero-1.28.6/cerbero-uninstalled').mode, 0o755)
             self.assertEqual(repair.repair_cerbero(target, source, []), 0)
 

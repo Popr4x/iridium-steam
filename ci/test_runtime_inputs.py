@@ -13,6 +13,30 @@ inputs = load("runtime_inputs", "fetch-runtime-inputs.py")
 
 
 class RuntimeInputTests(unittest.TestCase):
+    def test_supplied_archive_never_downloads_or_overwrites_changed_input(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            supplied = root / 'gmp.source-archive'
+            supplied.write_bytes(b'supplied source')
+            entry = {'name': 'fixture', 'sha256': hashlib.sha256(supplied.read_bytes()).hexdigest(),
+                     'url': 'https://example.invalid/source', 'destination': 'inputs/source.tar'}
+            with patch.object(inputs.urllib.request, 'urlopen', side_effect=AssertionError('Network used')):
+                inputs.fetch(root, entry, supplied)
+                target = root / entry['destination']
+                self.assertEqual(target.read_bytes(), supplied.read_bytes())
+                target.write_bytes(b'local edits')
+                with self.assertRaises(ValueError):
+                    inputs.fetch(root, entry, supplied)
+                supplied.write_bytes(b'corrupt source')
+                with self.assertRaises(ValueError):
+                    inputs.fetch(root, entry, supplied)
+                supplied.unlink()
+                with self.assertRaises(FileNotFoundError):
+                    inputs.fetch(root, entry, supplied)
+                self.assertEqual(target.read_bytes(), b'local edits')
+                self.assertFalse((root / '.build/runtime-downloads').exists())
+
     def test_locked_inputs_and_preparation_order(self):
         entries = json.loads((ROOT / "ci/runtime-inputs.json").read_text())
         self.assertEqual(len({entry['destination'] for entry in entries}), len(entries))

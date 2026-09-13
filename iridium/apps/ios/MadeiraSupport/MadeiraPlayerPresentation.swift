@@ -24,6 +24,10 @@ struct MadeiraPlayerPresentation: UIViewControllerRepresentable {
                 }
                 return
             }
+            if let player = controller.player,
+               player.presentingViewController == nil, !player.isBeingPresented {
+                controller.player = nil
+            }
             if let player = controller.player {
                 player.rootView = RuntimePlayerView(session: session, viewModel: viewModel, onCaptureChange: { [weak player] in player?.captureRequested = $0 }, presentationConfiguration: presentationConfiguration)
                 return
@@ -55,6 +59,13 @@ struct MadeiraPlayerPresentation: UIViewControllerRepresentable {
     final class Presenter: UIViewController {
         var player: Player?
         var sessionObservation: AnyCancellable?
+        private var foregroundObservation: AnyCancellable?
+        override func viewDidLoad() {
+            super.viewDidLoad()
+            foregroundObservation = NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.synchronize?() }
+        }
         private var dismissing = false
         func dismissPlayer() {
             guard !dismissing, let player, let presenter = player.presentingViewController else { return }
@@ -78,7 +89,14 @@ struct MadeiraPlayerPresentation: UIViewControllerRepresentable {
         var captureRequested = false { didSet { refreshCapture() } }
         private var observers: [NSObjectProtocol] = []
 
+        // The presented player owns capture, not its nested SwiftUI event host.
+        override var childViewControllerForPointerLock: UIViewController? { nil }
+        private var captureQueries = 0
         override var prefersPointerLocked: Bool {
+            captureQueries += 1
+            return wantsPointerCapture
+        }
+        private var wantsPointerCapture: Bool {
             captureRequested && UIApplication.shared.applicationState == .active
                 && !UIAccessibility.isAssistiveTouchRunning && !GCMouse.mice().isEmpty
         }
@@ -108,8 +126,9 @@ struct MadeiraPlayerPresentation: UIViewControllerRepresentable {
         private func refreshCapture() {
             setNeedsUpdateOfPrefersPointerLocked()
             #if MADEIRA_RUNTIME
-            MadeiraHardwareInput.pointerCaptured = prefersPointerLocked && viewIfLoaded?.window?.windowScene?.pointerLockState?.isLocked == true
-            RuntimeLogCapture.writeLine("[Launch] Pointer capture requested=\(prefersPointerLocked), active=\(MadeiraHardwareInput.pointerCaptured), AssistiveTouch=\(UIAccessibility.isAssistiveTouchRunning).")
+            MadeiraHardwareInput.acceptingInput = captureRequested && UIApplication.shared.applicationState == .active
+            MadeiraHardwareInput.pointerCaptured = wantsPointerCapture && viewIfLoaded?.window?.windowScene?.pointerLockState?.isLocked == true
+            RuntimeLogCapture.writeLine("[Launch] Pointer capture requested=\(wantsPointerCapture), systemQueries=\(captureQueries), sceneActive=\(viewIfLoaded?.window?.windowScene?.activationState == .foregroundActive), active=\(MadeiraHardwareInput.pointerCaptured), AssistiveTouch=\(UIAccessibility.isAssistiveTouchRunning).")
             #endif
         }
 

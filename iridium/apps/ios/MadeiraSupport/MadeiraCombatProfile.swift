@@ -1,6 +1,7 @@
 import Foundation
 import MadeiraNative
 
+// Hollow Knight-only diagnostic. Not part of the general runtime log.
 // All mutable sampling state is confined to the timer's serial queue.
 final class MadeiraCombatProfile: @unchecked Sendable {
     private let player: URL
@@ -20,11 +21,14 @@ final class MadeiraCombatProfile: @unchecked Sendable {
         let queue = DispatchQueue(label: "iridium.combat-profile", qos: .utility)
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(deadline: .now(), repeating: .milliseconds(50), leeway: .milliseconds(5))
-        timer.setEventHandler { [self] in sample() }
+        timer.setEventHandler { [weak self] in self?.sample() }
         self.timer = timer
         iridium_profile_enable(1)
         timer.resume()
     }
+
+    func stop() { timer?.cancel(); timer = nil; iridium_profile_enable(0) }
+    deinit { stop(); try? output.close(); try? reader?.close() }
 
     private func sample() {
         let now = ProcessInfo.processInfo.systemUptime

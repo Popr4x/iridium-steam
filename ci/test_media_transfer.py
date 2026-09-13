@@ -54,13 +54,20 @@ class MediaTransferTests(unittest.TestCase):
             recipe.parent.mkdir(parents=True)
             recipe.write_text(original)
             script = (ROOT / 'ci/prepare-media-sdk.sh').read_text()
-            command = next(line for line in script.splitlines()
-                           if line.startswith('git ') and '--check' not in line
-                           and 'cerbero-gperf-cxx14.patch' in line)
-            command = command.replace('$ROOT', str(root)).replace(
-                str(root / 'ci/patches/cerbero-gperf-cxx14.patch'), str(patch_file))
-            subprocess.run(['bash', '-c', command], cwd=recipe.parents[2], check=True)
+            helper = 'apply_source_patch() {' + script.split('apply_source_patch() {', 1)[1].split('\n}', 1)[0] + '\n}'
+            patches = root / 'ci/patches'
+            patches.mkdir(parents=True)
+            (patches / patch_file.name).write_bytes(patch_file.read_bytes())
+            command = helper + '\napply_source_patch cerbero-gperf-cxx14.patch\n'
+            import os
+            env = dict(os.environ, ROOT=str(root))
+            for _ in range(2):
+                subprocess.run(['bash', '-ec', command], env=env, cwd=recipe.parents[2], check=True)
             self.assertIn("meson_options = {'cpp_std': 'c++14'}", recipe.read_text())
+            recipe.write_text(recipe.read_text().replace("'c++14'", "'c++20'"))
+            result = subprocess.run(['bash', '-ec', command], env=env, cwd=recipe.parents[2], capture_output=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("'c++20'", recipe.read_text())
 
     def test_media_can_run_without_runtime_and_is_retained(self):
         workflow = (ROOT / '.github/workflows/build-unsigned-ipa.yml').read_text()

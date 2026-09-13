@@ -32,12 +32,13 @@ struct LibraryView: View {
         LibraryShelf(games: viewModel.games, artwork: artwork, controller: controller,
             play: { viewModel.recordLaunchPreparation(for: $0) },
             disabled: { viewModel.isLaunchActionDisabled(for: $0) },
-            launchTitle: { _ in "Play" },
+            launchTitle: { viewModel.launchActionTitle(for: $0) },
             launchDetail: { viewModel.isLaunchActionDisabled(for: $0) ? viewModel.launchActionDetail(for: $0) : nil },
             details: { detailGame = $0 },
             search: $search, favorites: $favorites, selectedID: $selectedID,
             importGame: { relocatingGame = nil; requestGameImport() }, settings: { appSettings = true },
             acceptsControllerInput: detailGame == nil && !appSettings && !isPresentingImportPicker && viewModel.importScanResult == nil && !isShowingLiveContainerRepair && artwork.error == nil)
+            .toolbar(.hidden, for: .navigationBar)
         }
         }
         .safeAreaInset(edge: .bottom) {
@@ -46,7 +47,6 @@ struct LibraryView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(appSettings ? .visible : .hidden, for: .navigationBar)
         .sheet(isPresented: Binding(get: { viewModel.importScanResult != nil }, set: { if !$0 { viewModel.dismissImportScan() } }), onDismiss: {
             if chooseAnotherFolder { chooseAnotherFolder = false; requestGameImport() }
         }) {
@@ -116,7 +116,7 @@ struct LibraryView: View {
                 } else if let executable = result.recommendedExecutable {
                     LabeledContent("Executable", value: executable.filename)
                 }
-            } header: { Text("Game") } footer: { Text("You can add custom and unreleased games without an online match. This does not confirm that a game will run. You can change the name and artwork later in Game Options.") }
+            } header: { Text("Game") } footer: { Text("Add the game with its own name and optional artwork. You can edit both in Game Options. Compatibility varies by game.") }
             if result.executables.isEmpty {
                 Text("No Windows executable was found. Choose the folder that contains the game's .exe file.")
             }
