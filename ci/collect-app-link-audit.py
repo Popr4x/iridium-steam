@@ -1,15 +1,44 @@
 #!/usr/bin/env python3
 """Record the app's native binaries without distributing executable payloads."""
 import hashlib
+import argparse
 import importlib.util
 import json
+import re
 from pathlib import Path
 import subprocess
-import sys
 
 spec = importlib.util.spec_from_file_location('packager', Path(__file__).with_name('package-unsigned-ipa.py'))
 packager = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(packager)
+
+
+def static_inputs(maps, root):
+    """Hash the actual archives named by the linker; this is not license approval."""
+    records = []
+    for link_map in sorted(maps):
+        objects = {}
+        # Symbol names later in Apple's maps can contain non-UTF-8 bytes.
+        # Only the object-file table contains archive inputs.
+        table = link_map.read_bytes().split(b'# Sections:', 1)[0].decode('utf-8')
+        for line in table.splitlines():
+            match = re.fullmatch(r'\[\s*\d+\]\s+(.+\.a)\((.+)\)', line)
+            if match:
+                objects.setdefault(match[1], []).append(match[2])
+        for name, members in sorted(objects.items()):
+            path = Path(name)
+            if not path.is_absolute():
+                path = root / path
+            path = path.resolve(strict=True)
+            with path.open('rb') as stream:
+                digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+            # Keep machine-specific paths out of the report.
+            label = str(path.relative_to(root)) if path.is_relative_to(root) else path.name
+            records.append({'link_map': link_map.name,
+                            'link_map_sha256': hashlib.sha256(link_map.read_bytes()).hexdigest(),
+                            'archive': label,
+                            'sha256': digest, 'members': members})
+    return records
 
 
 def inventory(app):
@@ -44,10 +73,19 @@ def inventory(app):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 3:
-        raise SystemExit('Usage: collect-app-link-audit.py Iridium.app output.json')
-    app, output = map(Path, sys.argv[1:])
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('app', type=Path)
+    parser.add_argument('output', type=Path)
+    parser.add_argument('--link-maps', type=Path)
+    args = parser.parse_args()
+    app, output = args.app, args.output
     records = inventory(app.resolve())
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(records, indent=2) + '\n')
+    if args.link_maps:
+        maps = list(args.link_maps.rglob('*LinkMap*.txt'))
+        if not maps:
+            raise ValueError('No final link maps found')
+        inputs = static_inputs(maps, Path.cwd().resolve())
+        output.with_name('static-inputs.json').write_text(json.dumps(inputs, indent=2) + '\n')
     print(f'Recorded {len(records)} native binaries. Static dependencies require link-map review.')

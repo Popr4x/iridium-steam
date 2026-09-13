@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build only the iPhone slice. Cerbero owns codec sources, patches and packaging.
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 CERBERO="$ROOT/.build/runtime-sources/cerbero"
 CONFIG="$ROOT/.build/cerbero-ci.cbc"
 JOBS="${IRIDIUM_BUILD_JOBS:-2}"
@@ -43,7 +43,7 @@ apply_source_patch() {
     fi
 }
 # Supplied source already includes these patches. Reject any other patch state.
-for patch in cerbero-gperf-cxx14.patch cerbero-assets-library.patch cerbero-source-manifest.patch; do
+for patch in cerbero-gperf-cxx14.patch cerbero-assets-library.patch cerbero-source-manifest.patch cerbero-cargo-source-cache.patch cerbero-meson-source-cache.patch; do
     apply_source_patch "$patch"
 done
 "$PACKAGING_PYTHON" "$ROOT/ci/check-media-source-package.py" "$CERBERO"

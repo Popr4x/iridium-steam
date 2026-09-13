@@ -136,9 +136,34 @@ must not be presented as a list of libraries linked into the final app.
 Xcode's installed Acknowledgments.pdf includes LLVM's University of Illinois/NCSA
 notice and separate Swift runtime terms. These are component-specific notices,
 not a blanket source grant for Apple SDKs. Apple SDKs and Xcode remain externally
-obtained build prerequisites. Match statically linked compiler runtime objects
-before treating the compiler-runtime review as complete. Do not substitute
-LLVM 22's source for Xcode's LLVM 21 runtime merely because both are LLVM.
+obtained build prerequisites. Retain the notices already identified for these inputs. Remaining Apple-specific
+coverage uncertainty is a residual licensing risk, not an open-ended provenance
+requirement. Do not describe LLVM 22 source as Apple LLVM 21 source.
+
+Review source obligations separately from permission to distribute compiler
+runtime code. GPLv3 and AGPLv3 section 1 exclude qualifying System Libraries
+from Corresponding Source and expressly include compilers as Major Components.
+A compiler-supplied support routine may qualify; its presence in a static link
+alone does not establish a source-distribution requirement. Record the basis
+for that classification against the exact linked object. This exception does
+not itself grant permission to redistribute Apple or third-party code.
+
+Apply the actual license version. LGPL 2.1 section 6 has its own exception for
+normally supplied major-component material, qualified when that component
+accompanies the executable. Do not assume the GPLv3 System Library definition
+settles this different provision. Record any valid later-version license route
+explicitly; this audit does not change the project's or components' licenses.
+
+For Xcode inputs, retain the existing toolchain identification, applicable notices,
+and completed source-exception analysis. Exact per-object source correspondence
+is not a release requirement without evidence that it is needed to comply with
+a license. Remaining Apple compiler-runtime coverage uncertainty is a residual
+risk. Public unsigned-IPA contractual authorization is acknowledged separately
+and is outside this open-source compliance audit; this does not grant permission.
+
+References: [GPLv3 section 1](https://gcc.gnu.org/onlinedocs/gcc/Copying.html),
+[LLVM license policy](https://llvm.org/docs/DeveloperPolicy.html), and
+[Apple Xcode agreement](https://www.apple.com/legal/sla/docs/xcode.pdf).
 
 
 Before final source packaging, restored idevice archives are checked against
@@ -162,11 +187,41 @@ arm64 iOS 18.0 minimum, unsigned state, public API and dynamic-dependency checks
 A local relink of the same source exposes Xcode's `chkstk_darwin.S.o` and
 `chkstk_darwin2.S.o`. The first object's two function bodies match byte sequences
 in the retained GLES framework; the second object's short branch is not unique
-and is not independently matched by that comparison. Their exact source/license
-boundary remains an unresolved distribution item at the final package gate. An abandoned LLVM review is not the
-corresponding source for these objects.
+and is not independently matched by that comparison. Their remaining Apple-specific license coverage uncertainty is recorded as a
+residual risk. No further instruction matching is required by this audit.
 
-LGPL static-library replacement must be checked on the final app, after it
-exists, before packaging approval. This is separate from the pre-build source
-inventory. Keep the final package gate closed until the supplied sources,
-patches and commands produce an app linked with a modified library.
+LGPL replacement material must permit users to modify the covered library and
+recombine or relink the application under the applicable license version.
+For LGPL 2.1 section 6(a), the work that uses the library may be supplied as
+object code and/or source code. Complete buildable Iridium source, required
+inputs and usable instructions can satisfy this route without a separate .o
+kit. Source files alone are insufficient if required generators, dependencies
+or link inputs are missing. Preserve modification and reverse-engineering rights
+for debugging those modifications. Check LGPLv3 components under section 4,
+including Installation Information where that section requires it.
+
+Engineering tests support this review. A modified-library marker test is
+optional evidence, not a general license requirement for every library.
+Byte-identical rebuilds are not required unless reproducibility is the stated
+test. Original release hashes identify the shipped artifacts; replacement
+artifacts normally have different hashes. Device behavior is a separate check.
+
+## Practical compliance completion
+
+The open-source compliance package is complete when major shipped components
+have identified licenses and required notices, required GPL/LGPL source and
+modifications are supplied, the buildable application material and instructions
+permit LGPL replacement/relinking, and packaged binaries have component owners.
+The accepted inventory covers 2,423 binaries and 24 static archives. Reuse it;
+do not require prose for each binary, intermediate-object hashes, reproducible
+builds, or per-library marker tests. Runtime testing is a separate release task.
+
+Ship the IPA with the required source archive or fixed complete repository,
+build/relink instructions, license texts, third-party notices, and component
+manifest. Temporary local audit paths are not a permanent source delivery method.
+The archive must include corrected source inputs and modifications, not just the
+older archive used before those corrections.
+
+Residual risks: Apple compiler-runtime grant coverage remains uncertain; the
+public unsigned-IPA route has a separately acknowledged contractual risk. These
+do not keep the open-source audit open once the material requirements are met.

@@ -1,5 +1,3 @@
 [
-  "Resolve the distribution/source terms for Xcode 27 libclang_rt.ios.a objects: ANGLE stack probes (chkstk_darwin.S.o and chkstk_darwin2.S.o) and the final app os_version_check.c.o. LLVM 22 source is not evidence for these Apple LLVM 21 objects.",
-  "Match the final app link and packaged libraries to the audited source and notices before IPA upload. Component checks and the media link probe are not a final app audit.",
-  "Verify a complete rebuild from the distributed source and replacement/relinking of the media and Wine libraries in the full app."
+  "Supply the final corresponding-source package with the corrected media source inputs, current application/component modifications, existing build/relink instructions, license notices and accepted component manifest. The retained older source archive does not yet contain this complete set."
 ]

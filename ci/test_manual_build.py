@@ -24,6 +24,22 @@ packager = load("unsigned_packager", "package-unsigned-ipa.py")
 prerequisites = load("ipa_prerequisites", "check-ipa-prerequisites.py")
 
 class ManualBuildTests(unittest.TestCase):
+    def test_static_input_inventory_preserves_members_and_rejects_missing_archive(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            archive = root / 'library with spaces.a'
+            archive.write_bytes(b'archive fixture')
+            link_map = root / 'App-LinkMap.txt'
+            link_map.write_bytes(f'[ 1] {archive}(object.o)\n[ 2] {archive}(object.o)\n# Sections:\n'.encode() + b'\xffsymbol')
+            record, = app_audit.static_inputs([link_map], root)
+            self.assertEqual(record['archive'], archive.name)
+            self.assertEqual(record['sha256'], hashlib.sha256(archive.read_bytes()).hexdigest())
+            self.assertEqual(record['members'], ['object.o', 'object.o'])
+            archive.unlink()
+            with self.assertRaises(FileNotFoundError):
+                app_audit.static_inputs([link_map], root)
+
     def test_final_audit_blocks_packaging_but_not_audit_build(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

@@ -416,7 +416,7 @@ jobs:
             LD_GENERATE_MAP_FILE=YES \
             CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" build
       - name: Record app binaries for final audit
-        run: python3 ci/collect-app-link-audit.py .build/unsigned-ipa/Build/Products/Release-iphoneos/Iridium.app .build/app-link-audit/binaries.json
+        run: python3 ci/collect-app-link-audit.py .build/unsigned-ipa/Build/Products/Release-iphoneos/Iridium.app .build/app-link-audit/binaries.json --link-maps .build/unsigned-ipa/Build/Intermediates.noindex
       - name: Verify modified LGPL library relinking
         if: inputs.verify_lgpl_relink
         run: python3 ci/check-lgpl-relink.py

@@ -13,7 +13,8 @@ WORKFLOW = '.github/workflows/build-unsigned-ipa.yml'
 MEDIA_INPUTS = ('ci/prepare-media-sdk.sh', 'ci/fetch-runtime-inputs.py',
                 'ci/check-media-toolchain.py',
                 'ci/runtime-inputs.json', 'ci/patches/cerbero-gperf-cxx14.patch',
-                'ci/patches/cerbero-assets-library.patch', 'iridium/apps/ios/stikjit.yml',
+                'ci/patches/cerbero-assets-library.patch', 'ci/patches/cerbero-cargo-source-cache.patch', 'ci/patches/cerbero-meson-source-cache.patch',
+                'iridium/apps/ios/stikjit.yml',
                 'check-public-source.py')
 PREFIX_INPUTS = ('testrepos/Madeira/wine', 'testrepos/Madeira/scripts/build-prefix-snapshot.sh',
                  'ci/prepare-prefix.sh', 'ci/sanitize-prefix.py', 'ci/wineboot-from-build.sh')
