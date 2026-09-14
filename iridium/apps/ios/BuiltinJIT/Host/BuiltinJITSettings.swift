@@ -14,7 +14,7 @@ struct BuiltinJITSettings: View {
             MenuButton("Import Pairing File") { importing = true }
             Text(BuiltinJIT.isHosted
                  ? "Use standalone Iridium for built-in JIT. External StikDebug remains available."
-                 : "Requires iOS 26, debugging permission, a pairing file, and connected LocalDevVPN.")
+                 : "Requires iOS 18, debugging permission, a pairing file, and connected LocalDevVPN.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             if let message { Text(message).font(.footnote) }

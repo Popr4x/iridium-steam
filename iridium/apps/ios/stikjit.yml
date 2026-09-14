@@ -3,12 +3,12 @@ include:
 name: IridiumStikJIT
 settings:
   base:
-    IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "18.0"
 targets:
   MadeiraNative:
-    deploymentTarget: "26.0"
+    deploymentTarget: "18.0"
   Iridium:
-    deploymentTarget: "26.0"
+    deploymentTarget: "18.0"
     sources:
       - path: BuiltinJIT/Host
         excludes: [Bridging.h]
@@ -28,7 +28,7 @@ targets:
   IridiumJITHelper:
     type: app-extension
     platform: iOS
-    deploymentTarget: "26.0"
+    deploymentTarget: "18.0"
     sources:
       - path: BuiltinJIT/Helper
       - path: BuiltinJIT/Shared
