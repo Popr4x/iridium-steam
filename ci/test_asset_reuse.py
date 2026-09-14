@@ -1,3 +1,4 @@
+import os
 import subprocess
 import tempfile
 import unittest
@@ -98,6 +99,51 @@ class AssetReuseTests(unittest.TestCase):
              patch.object(reuse, 'verify_producer', return_value=revision) as verify:
             self.assertEqual(reuse.select(Path('.'), 'media', 'feature'), '123')
             verify.assert_called_once_with(Path('.'), '123', 'media', 'feature')
+
+    def test_rerun_can_select_same_run_media_from_prior_attempt(self):
+        runs = {'workflow_runs': [{'id': 123}]}
+        env = {'GITHUB_RUN_ID': '123', 'GITHUB_RUN_ATTEMPT': '2'}
+        with patch.dict(os.environ, env, clear=False), \
+             patch.object(reuse, 'api', return_value=runs), \
+             patch.object(reuse, 'verify_producer', return_value='a' * 40) as verify:
+            self.assertEqual(reuse.select(Path('.'), 'media', 'feature'), '123')
+            verify.assert_called_once_with(Path('.'), '123', 'media', 'feature')
+        env['GITHUB_RUN_ATTEMPT'] = '1'
+        with patch.dict(os.environ, env, clear=False), \
+             patch.object(reuse, 'api', return_value=runs), \
+             patch.object(reuse, 'verify_producer') as verify:
+            self.assertEqual(reuse.select(Path('.'), 'media', 'feature'), '')
+            verify.assert_not_called()
+
+    def test_rerun_can_select_same_run_compiler_checkpoint(self):
+        artifacts = {'artifacts': [{'expired': False, 'workflow_run': {'id': 123}}],
+                     'total_count': 1}
+        env = {'GITHUB_RUN_ID': '123', 'GITHUB_RUN_ATTEMPT': '2',
+               'NATIVE_TOOLCHAIN': 'b' * 64}
+        with patch.dict(os.environ, env, clear=False), \
+             patch.object(reuse, 'api', return_value=artifacts), \
+             patch.object(reuse, 'verify_producer', return_value='a' * 40) as verify:
+            self.assertEqual(reuse.select(Path('.'), 'native', 'feature'), '123')
+            verify.assert_called_once_with(Path('.'), '123', 'native', 'feature')
+        env['GITHUB_RUN_ATTEMPT'] = '1'
+        with patch.dict(os.environ, env, clear=False), \
+             patch.object(reuse, 'api', return_value=artifacts), \
+             patch.object(reuse, 'verify_producer') as verify:
+            self.assertEqual(reuse.select(Path('.'), 'native', 'feature'), '')
+            verify.assert_not_called()
+
+    def test_producer_validation_reads_all_workflow_attempts(self):
+        revision = 'a' * 40
+        run = {'event': 'workflow_dispatch', 'head_branch': 'feature',
+               'head_sha': revision, 'path': reuse.WORKFLOW,
+               'head_repository': {'full_name': reuse.REPO}}
+        jobs = {'jobs': [{'name': 'media', 'conclusion': 'success'}]}
+        artifacts = {'artifacts': [{'name': 'media-sdk-with-source', 'expired': False}]}
+        with patch.object(reuse, 'api', side_effect=[run, jobs, artifacts]) as api, \
+             patch.object(reuse, 'compatible'):
+            self.assertEqual(reuse.verify_producer(Path('.'), '123', 'media', 'feature'), revision)
+            self.assertEqual(api.call_args_list[1].args[0],
+                             'actions/runs/123/jobs?filter=all&per_page=100')
 
     def test_input_and_producer_changes_invalidate_but_ui_does_not(self):
         with tempfile.TemporaryDirectory() as temp:
