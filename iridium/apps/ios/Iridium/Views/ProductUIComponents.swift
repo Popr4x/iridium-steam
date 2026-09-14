@@ -100,7 +100,7 @@ struct IridiumGameArtwork: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(.white.opacity(0.22), lineWidth: 1)
         }
-        .accessibilityLabel("Artwork placeholder for \(title)")
+        .accessibilityLabel("Default artwork for \(title)")
     }
 }
 

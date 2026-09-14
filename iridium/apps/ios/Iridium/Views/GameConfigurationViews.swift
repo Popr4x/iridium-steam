@@ -17,10 +17,10 @@ struct GameControlsView: View {
                 MenuValue("Mouse", value: mouseCount == 0 ? "None detected" : "\(mouseCount) connected")
             }
             Section("Playing with a Controller") {
-                Text("Use the game's own controls menu to choose its button layout. A connected device does not confirm that a game supports it.")
+                Text("Choose a button layout in the game's controls menu. Controller support varies by game.")
             }
             Section("Touch, Keyboard & Mouse") {
-                Text("Touch can select controls in Iridium. In-game touch and pointer behavior depends on the game and runtime. A full virtual gamepad is not provided here.")
+                Text("Use touch to navigate Iridium. Touch, keyboard, and mouse support during play varies by game and runtime.")
                 Text("Check input events in the player diagnostics if a connected device does not respond in the game.")
             }
         }
@@ -100,7 +100,7 @@ struct GameEnvironmentView: View {
                         Label("Rebuild Environment", systemImage: "arrow.trianglehead.2.clockwise.rotate.90")
                     }
 
-                    Text("Rebuild recreates the Windows environment. Imported game and save folders are not removed, but custom environment changes may be lost.")
+                    Text("Rebuild recreates the Windows environment and keeps imported game and mapped save folders. Custom environment settings may be lost.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }.listRowBackground(RoundedRectangle(cornerRadius: 16).fill(Color.white.opacity(0.06)).padding(.vertical, 2)).listRowSeparator(.hidden)
@@ -161,7 +161,7 @@ struct GameCompatibilityView: View {
             }
 
             Section {
-                Text("These checks confirm that required files are present. They do not test gameplay, audio, controls, or cutscenes.")
+                Text("Checks cover the files and settings needed to launch. Game compatibility requires a play test.")
             }
             Section("Checks") {
                 ForEach(readiness.checks) { check in
@@ -241,12 +241,12 @@ struct GameStorageView: View {
 
             if usesMadeiraRuntime {
                 Section("Saves") {
-                    Text("Save locations depend on the game. This screen does not yet report the active runtime's save folder or verify save persistence.")
+                    Text("Save locations vary by game. Check the game’s documentation for its save location before backing up files.")
                 }
             } else {
             Section("Save Mapping") {
                 pathRow(game.savePathMapping)
-                Text("Iridium keeps this mapping separate from environment maintenance so repairs do not intentionally delete the mapped save folder.")
+                Text("This folder is kept when you repair or rebuild the Windows environment.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }.listRowBackground(RoundedRectangle(cornerRadius: 16).fill(Color.white.opacity(0.06)).padding(.vertical, 2)).listRowSeparator(.hidden)

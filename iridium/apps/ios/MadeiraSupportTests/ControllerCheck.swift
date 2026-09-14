@@ -5,6 +5,11 @@ assert(MadeiraKeys.virtualKey(hid: 26) == 0x57) // W
 assert(MadeiraKeys.virtualKey(hid: 225) == 0xa0) // left Shift
 assert(MadeiraKeys.virtualKey(hid: 224) == 0xa2) // left Control
 assert(MadeiraKeys.virtualKey(hid: 43) == 0x09) // Tab
+assert(MadeiraKeys.virtualKey(hid: 89) == 0x61) // keypad 1
+assert(MadeiraKeys.virtualKey(hid: 98) == 0x60) // keypad 0
+assert(MadeiraKeys.virtualKey(hid: 88) == 0x0d) // keypad Enter
+assert(MadeiraKeys.virtualKey(hid: 104) == 0x7c) // F13
+assert(MadeiraKeys.virtualKey(hid: 115) == 0x87) // F24
 assert(MadeiraKeys.virtualKey(hid: 999) == nil)
 var keys = MadeiraKeys()
 assert(keys.update(name: "ArrowLeft", value: 1).first?.0 == 0x25)

@@ -25,6 +25,7 @@
 		<string>stikjit</string>
 		<string>stikdebug</string>
 		<string>livecontainer2</string>
+		<string>livecontainer</string>
 		<string>apple-magnifier</string>
 		<string>sidestore</string>
 	</array>
@@ -43,6 +44,8 @@
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Iridium uses the local network to communicate with AltServer and local JIT helpers.</string>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

@@ -1,4 +1,6 @@
 import io
+import hashlib
+import tarfile
 import json
 from pathlib import Path
 import struct
@@ -10,10 +12,21 @@ from test_manual_build import ROOT, load
 
 windows = load('windows_stage', 'stage-windows-runtime.py')
 prefixes = load('prefix_stage', 'sanitize-prefix.py')
+prefix_transfer = load('prefix_transfer', 'verify-prefix.py')
 debian = load('debian_sources', 'collect-debian-sources.py')
 
 
 class RuntimeStagingTests(unittest.TestCase):
+    def test_packaged_runtime_rejects_wine_placeholder_translator(self):
+        with tempfile.TemporaryDirectory() as temp:
+            app = Path(temp)
+            translator = app / 'arm64ec-windows/xtajit64.dll'
+            translator.parent.mkdir()
+            translator.write_bytes(b'x64 emulation not implemented')
+            with patch.object(windows, 'check_pe'):
+                with self.assertRaisesRegex(ValueError, 'placeholder translator'):
+                    windows.check(app)
+
     def test_debian_owner_ignores_diversions_and_rejects_ambiguity(self):
         path = '/lib64/ld-linux-x86-64.so.2'
         output = (f'diversion by libc6 from: {path}\n'
@@ -28,17 +41,103 @@ class RuntimeStagingTests(unittest.TestCase):
     def test_pe_machine_check(self):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / 'module.dll'
-            header = bytearray(64)
+            header = bytearray(512)
             header[:2] = b'MZ'
             struct.pack_into('<I', header, 60, 64)
             for machine, arch in [(0xaa64, 'aarch64'), (0x8664, 'arm64ec')]:
-                path.write_bytes(header + b'PE\0\0' + struct.pack('<H', machine))
+                header[64:70] = b'PE\0\0' + struct.pack('<H', machine)
+                path.write_bytes(header)
                 windows.check_pe(path, arch)
                 with self.assertRaises(ValueError):
                     windows.check_pe(path, 'aarch64' if arch == 'arm64ec' else 'arm64ec')
             path.write_bytes(b'MZ')
             with self.assertRaises(ValueError):
                 windows.check_pe(path, 'arm64ec')
+
+    def test_combined_wine_output_routes_hybrid_and_ec_only_modules(self):
+        def image(machine, hybrid=False):
+            data = bytearray(1024)
+            data[:2] = b'MZ'
+            struct.pack_into('<I', data, 60, 64)
+            data[64:68] = b'PE\0\0'
+            struct.pack_into('<HH', data, 68, machine, 1)
+            struct.pack_into('<H', data, 84, 240)
+            struct.pack_into('<H', data, 88, 0x20b)
+            struct.pack_into('<I', data, 196, 16)
+            if hybrid:
+                struct.pack_into('<II', data, 280, 0x1000, 208)
+                struct.pack_into('<III', data, 340, 0x1000, 512, 512)
+                struct.pack_into('<I', data, 512, 208)
+                struct.pack_into('<Q', data, 712, 0x180002000)
+            return data
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            build, app = root / 'build', root / 'app'
+            for name, machine, hybrid in [('ntdll', 0xaa64, True),
+                                           ('vcruntime140_1', 0x8664, False),
+                                           ('native', 0xaa64, False),
+                                           ('apisetschema', 0xaa64, False)]:
+                path = build / 'dlls' / name / 'aarch64-windows' / (name + '.dll')
+                path.parent.mkdir(parents=True)
+                data = image(machine, hybrid)
+                if name == 'apisetschema':
+                    data[328:336] = b'.apiset\0'
+                path.write_bytes(data)
+            for folder, name in [('nls', 'l_intl.nls'), ('fonts', 'test.ttf')]:
+                (build / folder).mkdir()
+                (build / folder / name).write_bytes(b'resource')
+            source = root / 'source'
+            (source / 'fonts').mkdir(parents=True)
+            (source / 'fonts/test.ttf').write_bytes(b'source fallback')
+            (source / 'fonts/source.ttf').write_bytes(b'source only')
+            windows.stage(build, app, source)
+            self.assertEqual((app / 'fonts/test.ttf').read_bytes(), b'resource')
+            self.assertEqual((app / 'fonts/source.ttf').read_bytes(), b'source only')
+            (build / 'fonts/test.ttf').unlink()
+            windows.stage(build, app, source)
+            self.assertEqual((app / 'fonts/test.ttf').read_bytes(), b'source fallback')
+            with self.assertRaisesRegex(ValueError, 'fonts'):
+                windows.stage(build, app)
+            for arch in windows.MACHINES:
+                windows.check_pe(app / f'{arch}-windows/ntdll.dll', arch)
+                windows.check_pe(app / f'{arch}-windows/apisetschema.dll', arch)
+            self.assertTrue((app / 'arm64ec-windows/vcruntime140_1.dll').exists())
+            self.assertFalse((app / 'aarch64-windows/vcruntime140_1.dll').exists())
+            self.assertFalse((app / 'arm64ec-windows/native.dll').exists())
+            schema = app / 'arm64ec-windows/apisetschema.dll'
+            executable_schema = bytearray(schema.read_bytes())
+            struct.pack_into('<I', executable_schema, 104, 4096)
+            schema.write_bytes(executable_schema)
+            with self.assertRaisesRegex(ValueError, 'data-only'):
+                windows.check_pe(schema, 'arm64ec')
+            broken = root / 'broken.dll'
+            broken.write_bytes(image(0xaa64, True)[:600])
+            with self.assertRaises(ValueError):
+                windows.pe_architectures(broken)
+
+    def test_prefix_transfer_checks_revision_checksum_and_members(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / 'source-revision.txt').write_text('revision')
+            def archive(extra=None):
+                with tarfile.open(root / 'prefix-template.tar.gz', 'w:gz') as tar:
+                    for name in ['prefix/system.reg', 'prefix/user.reg', 'prefix/userdef.reg'] + ([extra] if extra else []):
+                        item = tarfile.TarInfo(name)
+                        item.size = 1
+                        tar.addfile(item, io.BytesIO(b'x'))
+                (root / 'SHA256SUMS').write_text(''.join(
+                    hashlib.sha256((root / name).read_bytes()).hexdigest() + '  ' + name + '\n'
+                    for name in ['prefix-template.tar.gz', 'source-revision.txt']))
+            archive()
+            prefix_transfer.check_files(root, 'revision')
+            with self.assertRaisesRegex(ValueError, 'revision'):
+                prefix_transfer.check_files(root, 'different')
+            (root / 'prefix-template.tar.gz').write_bytes(b'corrupt')
+            with self.assertRaisesRegex(ValueError, 'checksum'):
+                prefix_transfer.check_files(root, 'revision')
+            archive('../outside')
+            with self.assertRaisesRegex(ValueError, 'path'):
+                prefix_transfer.check_files(root, 'revision')
 
     def test_prefix_never_follows_host_links_and_requires_marker(self):
         with tempfile.TemporaryDirectory() as temp:

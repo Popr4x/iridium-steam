@@ -187,12 +187,19 @@ private struct MenuFocusItem<Content: View>: View {
     @Environment(\.isEnabled) private var enabled
     @State private var id = UUID()
     @State private var rowView = UIView()
+    @FocusState private var keyboardFocused: Bool
     var body: some View {
         let rowProbe = rowView
         return content
+            // Keyboard and controller use the same row highlight; text editing keeps native focus.
+            .focused($keyboardFocused)
+            .onChange(of: keyboardFocused) { _, focused in
+                if focused { focus.selected = id }
+            }
+            .focusEffectDisabled(focus.endEditing == nil)
             .padding(.vertical, 3)
             .background {
-                RoundedRectangle(cornerRadius: 10).fill(.white.opacity(focus.visible && focus.selected == id ? 0.16 : 0))
+                RoundedRectangle(cornerRadius: 10).fill(.white.opacity((focus.visible && focus.selected == id) || keyboardFocused ? 0.16 : 0))
                     .padding(.horizontal, -8).padding(.vertical, -3)
             }
             .background {

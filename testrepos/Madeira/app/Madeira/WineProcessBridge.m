@@ -387,7 +387,11 @@ static void *wine_process_thread(void *arg) {
         {
             const char *verbose = getenv("MADEIRA_DEBUG_VERBOSE");
             const char *mediaTrace = getenv("IRIDIUM_MEDIA_TRACE");
-            if (mediaTrace && *mediaTrace == '1') {
+            const char *inputTrace = getenv("IRIDIUM_INPUT_TRACE");
+            if (inputTrace && *inputTrace == '1') {
+                setenv("WINEDEBUG", "err+all,err-virtual,trace+dinput,trace+rawinput", 1);
+                LOG("WINEDEBUG = targeted input trace");
+            } else if (mediaTrace && *mediaTrace == '1') {
                 setenv("WINEDEBUG", "err+all,err-virtual,trace+mfreadwrite,trace+mfplat,warn+quartz", 1);
                 LOG("WINEDEBUG = targeted Iridium media trace");
             } else if (verbose && *verbose && *verbose != '0') {

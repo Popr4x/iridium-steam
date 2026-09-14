@@ -45,7 +45,8 @@ Do not use a placeholder command as proof that publication happened.
 ## Release sequence
 
 1. Select an exact source commit after review and green source checks. Review
-   outstanding issues and `ci/binary-release-blockers.json`; never clear entries
+   outstanding issues, `ci/binary-release-blockers.json` (build readiness), and
+   `ci/binary-package-blockers.json` (final binary review); never clear entries
    just to make CI green. Record the evidence that resolves each entry.
 2. Start the manual build only when requested. Retain its commit, run URL,
    dependency revisions, source archive, notices, and checksums. Fix failures
@@ -80,3 +81,53 @@ References:
 - https://semver.org/spec/v2.0.0.html
 - https://keepachangelog.com/en/1.1.0/
 - https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository
+
+The final binary review gate runs after Xcode and before IPA packaging or upload.
+App link maps are generated and retained for seven days even when that gate
+blocks packaging. A missing or invalid final-review record blocks packaging.
+This permits an audit build without treating it as an approved release.
+
+The audit artifact also records each native binary's bundle-relative path, size,
+SHA-256 digest and dynamic library references. It contains no executable payloads.
+Compare static dependencies using the link maps; dynamic references alone cannot
+establish static-library source coverage. Inventory failures block packaging.
+
+## Source package and component records
+
+Keep three decisions separate for each component: permission to distribute,
+source/notice obligations, and engineering evidence. Use `UNRESOLVED` when the
+available evidence does not establish a decision. Record Apple contractual
+permission for the intended distribution route separately from component grants.
+A System Library source exclusion does not itself grant redistribution rights.
+
+Deliver one versioned `Iridium-corresponding-source.tar.gz` beside the IPA.
+It contains the exact checkout (including submodule sources), dependency source
+archives, patches, generated inputs or their generators, build and replacement
+instructions, licenses, notices, and a component manifest. Keep the archive and
+its checksum at a permanent versioned release URL for as long as required by
+the distribution method; a seven-day Actions artifact is not that URL.
+Do not include Apple SDKs, compiler object files, signing material or game data.
+Document externally obtained toolchain prerequisites and applicable exclusions.
+
+Use the accepted component manifest and static-archive mappings. Each major
+component needs its license, source revision or archive, modifications, build
+entry point, notice location, and bundle outputs. Existing detailed records may
+remain as evidence; do not expand them into per-object requirements. The
+accepted 2,423-file inventory has no unmapped files and the 24 static-archive
+mappings are sufficient. A new dependency needs a license/source record, not a
+new forensic audit of unchanged components.
+
+Use release hashes to identify what was shipped and to check transfers.
+Do not compare a modified rebuild to the release hash as a license test.
+A complete buildable source package can provide LGPL replacement material;
+a separate application object kit is needed only if the chosen compliance route
+or missing buildable application source requires it. A marker test is optional.
+See the replacement commands in [the build instructions](actions-ipa.md).
+
+## Open-source audit scope
+
+Use the completion rule in LICENSING.md. Device tests do not gate open-source
+compliance completion. Apple compiler-runtime uncertainty is a residual licensing
+risk; public unsigned-IPA contractual authorization is a separate acknowledged
+risk outside this audit. Do not research those questions indefinitely or require
+exact Apple object-source matching without affirmative evidence of a prohibition.

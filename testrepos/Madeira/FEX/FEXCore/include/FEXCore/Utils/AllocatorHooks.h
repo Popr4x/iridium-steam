@@ -117,11 +117,8 @@ inline void* VirtualAlloc(void* Base, size_t Size, bool Execute = false, bool Co
     AddrParam.Pointer = &AddrReq;
     // No MEM_TOP_DOWN here: Windows rejects it in combination with address requirements.
     void* Ret = ::VirtualAlloc2(nullptr, nullptr, Size, (Commit ? MEM_COMMIT : 0) | MEM_RESERVE, PAGE_READWRITE, &AddrParam, 1);
-    if (Ret) {
-      return Ret;
-    }
-    /* Band exists but is exhausted: a different failure from "no band", and
-     * the pre-existing ml321 hardening (#43) still applies below. */
+    // Never spill host structures into guest address space when the arena is full.
+    return Ret;
   }
 #endif
   MEM_EXTENDED_PARAMETER Parameter {};

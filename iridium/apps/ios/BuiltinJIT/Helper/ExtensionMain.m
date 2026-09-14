@@ -6,7 +6,9 @@
 // allow-list entry; unlike the reference proposal, never disable class validation.
 static void (*originalValidation)(id, SEL, Class, id, BOOL);
 static void validateEndpoint(id decoder, SEL selector, Class cls, id key, BOOL invocations) {
-    if (cls == NSXPCListenerEndpoint.class && !invocations) return;
+    // The flag describes the enclosing XPC invocation, not the endpoint's class.
+    // Permit only the endpoint; retain Apple's checks for every other class.
+    if (cls == NSXPCListenerEndpoint.class) return;
     originalValidation(decoder, selector, cls, key, invocations);
 }
 __attribute__((used, visibility("default")))

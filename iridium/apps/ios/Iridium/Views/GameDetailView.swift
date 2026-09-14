@@ -61,6 +61,21 @@ struct GameDetailView: View {
             } footer: { Text("Removes only this library entry. Game files, artwork, and saves stay on your device.") }
         }
         .iridiumListChrome().navigationTitle("Game Options").navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            ZStack {
+                Text("Game Options").font(.headline)
+                HStack {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "chevron.left").font(.title3.weight(.semibold))
+                            .frame(width: 32, height: 32)
+                    }
+                    .libraryGlass().buttonBorderShape(.circle)
+                    .accessibilityLabel("Back")
+                    Spacer()
+                }
+            }.padding(.horizontal, 16).padding(.vertical, 8)
+        }
         .sheet(isPresented: $rename) { LibraryAppearanceEditor(game: game, artwork: artwork) }
         .sheet(isPresented: $confirmRemoval) {
             NavigationStack {

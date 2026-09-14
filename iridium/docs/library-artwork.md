@@ -1,14 +1,14 @@
 # Artwork library
 
-The library now reads its shelf from registered GameRecords. No game titles, catalog IDs, or covers are bundled into the production UI. Existing import and launch operations still own game files and saves.
+The library displays imported games. Each game can use catalog artwork, a custom image, or default artwork.
 
 ## Import and matching
 
 - The public Steam store catalog is the default metadata source. It does not check Steam ownership or require a login. SteamGridDB is an optional alternate source; its key is stored in Keychain.
 - Only a cleaned title is sent for search. Parent folders and executable contents are not uploaded.
 - Automatic matching requires one exact normalized catalog title and a matching executable basename. A folder name alone is insufficient. Generic executables and ambiguous names remain unmatched.
-- This version does not parse PE version resources or maintain an executable-signature database. Use Game Options > Edit Name and Artwork > Find Matches for those cases.
-- Games absent from either catalog remain playable with a local title and fallback artwork. The importer also checks explicit root artwork files (cover.jpg/png, folder.jpg, icon.png, game.ico), without scanning textures or saves.
+- For an uncertain match, use Game Options > Rename & Artwork > Find Matches.
+- Games absent from either catalog can be added with a local title and default artwork. Game compatibility is independent of artwork matching. The importer also checks explicit root artwork files (cover.jpg/png, folder.jpg, icon.png, game.ico), without scanning textures or saves.
 - Download failures do not gate launch. Catalog lookup is best-effort; Valve's public store endpoints are not a versioned, guaranteed third-party service.
 
 ## User choices

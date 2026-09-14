@@ -1,6 +1,23 @@
 import XCTest
 
 final class InterfaceTests: XCTestCase {
+    func testRepeatedLibraryFilterWithHints() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--covers", "--hints"]
+        app.launch()
+        for orientation in [UIDeviceOrientation.portrait, .landscapeLeft] {
+            XCUIDevice.shared.orientation = orientation
+            let filter = app.segmentedControls["Library filter"]
+            XCTAssertTrue(filter.waitForExistence(timeout: 10))
+            for _ in 0..<3 {
+                filter.buttons["Favorites"].tap()
+                XCTAssertTrue(filter.buttons["Favorites"].isSelected)
+                filter.buttons["All Games"].tap()
+                XCTAssertTrue(filter.buttons["All Games"].isSelected)
+            }
+        }
+    }
+
     func testInterruptedCarouselAndSearchFocus() {
         let app = XCUIApplication()
         app.launchArguments = ["--controller", "--covers"]

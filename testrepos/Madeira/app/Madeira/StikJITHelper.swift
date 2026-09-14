@@ -8,7 +8,8 @@ enum StikJITHelper {
     private static let persistentScriptRequestKey = "IridiumPersistentJITScriptRequested"
 
     static var persistentScriptRequested: Bool {
-        UserDefaults.standard.bool(forKey: persistentScriptRequestKey)
+        UserDefaults.standard.bool(forKey: persistentScriptRequestKey) &&
+            UserDefaults.standard.double(forKey: "IridiumJITDeadline") > Date().timeIntervalSince1970
     }
 
     static func consumePersistentScriptRequest() {
@@ -31,97 +32,114 @@ enum StikJITHelper {
         return scriptBase64
     }
 
-    /// Check if StikDebug or StikJIT is available by trying to open their URL.
+    enum Route: String, CaseIterable {
+        case automatic, livecontainer2, livecontainer, stikdebug
+        var title: String {
+            switch self {
+            case .automatic: return "Automatic"
+            case .livecontainer2: return "LiveContainer2"
+            case .livecontainer: return "LiveContainer"
+            case .stikdebug: return "StikDebug"
+            }
+        }
+    }
+    static let routeKey = "IridiumExternalJITRoute"
+    static var route: Route { Route(rawValue: UserDefaults.standard.string(forKey: routeKey) ?? "") ?? .automatic }
+    private static var timer: Timer?
+    private static var activation: Task<Void, Never>?
+    private static var completion: ((Bool) -> Void)?
+    private static var checking = false
+    private static var request = UUID()
+    private(set) static var lastFailure = "JIT was not enabled."
+
     static var isAvailable: Bool {
-        guard let url = URL(string: "stikjit://enable-jit") else { return false }
-        return UIApplication.shared.canOpenURL(url)
+        ["livecontainer2", "livecontainer", "stikjit"].contains {
+            UIApplication.shared.canOpenURL(URL(string: "\($0)://")!)
+        }
     }
 
-    /// Open StikDebug with our JIT script embedded in the URL.
-    /// StikDebug will attach to our process and run the script.
+    static func cancel() {
+        guard completion != nil else { return }
+        finish(false, message: "JIT request cancelled.")
+    }
+
+    private static func finish(_ success: Bool, message: String? = nil) {
+        timer?.invalidate(); timer = nil
+        activation?.cancel(); activation = nil
+        checking = false
+        request = UUID()
+        if let message { lastFailure = message; LogStore.shared.log(message, level: .error) }
+        if !success { consumePersistentScriptRequest() }
+        let callback = completion
+        completion = nil
+        callback?(success)
+    }
+
     static func enableJIT(completion: @escaping (Bool) -> Void) {
-        let bundleId = Bundle.main.bundleIdentifier ?? "com.madeira.emulator"
-        let wasAlreadyDebugged = jit_check_debugged()
+        cancel()
+        self.completion = completion
+        let token = request
+        let wasDebugged = jit_check_debugged()
+        let deadline = Date().addingTimeInterval(180)
+        UserDefaults.standard.set(deadline.timeIntervalSince1970, forKey: "IridiumJITDeadline")
         UserDefaults.standard.set(true, forKey: persistentScriptRequestKey)
-
-        // Build the URL with script data
-        let scriptData = resolvedScriptBase64.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        let urlString = "stikjit://enable-jit?bundle-id=\(bundleId)&script-data=\(scriptData)"
-
-        guard let url = URL(string: urlString) else {
-            consumePersistentScriptRequest()
-            LogStore.shared.log("Failed to build StikJIT URL", level: .error)
-            completion(false)
-            return
+        var components = URLComponents()
+        components.scheme = "stikjit"
+        components.host = "enable-jit"
+        components.queryItems = [
+            URLQueryItem(name: "bundle-id", value: Bundle.main.bundleIdentifier ?? "com.madeira.emulator"),
+            URLQueryItem(name: "script-data", value: resolvedScriptBase64)
+        ]
+        guard let url = components.url else { finish(false, message: "Cannot create the JIT request."); return }
+        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+            guard request == token else { return }
+            if Date() >= deadline { finish(false, message: "JIT timed out. Open your JIT app and try again.") }
+            else if checking && jit_check_debugged() { finish(true) }
         }
-
-        LogStore.shared.log("Opening StikDebug to enable JIT...")
-
-        UIApplication.shared.open(url, options: [:]) { success in
-            if !success {
-                LogStore.shared.log("Opening StikDebug through LiveContainer2...")
-                guard let forwardedURL = liveContainerURL(for: url) else {
-                    consumePersistentScriptRequest()
-                    completion(false)
-                    return
-                }
-                UIApplication.shared.open(forwardedURL, options: [:]) { opened in
-                    guard opened else {
-                        consumePersistentScriptRequest()
-                        LogStore.shared.log("Could not open StikDebug or LiveContainer2.", level: .error)
-                        completion(false)
+        let routes: [Route] = route == .automatic ? [.livecontainer2, .stikdebug, .livecontainer] : [route]
+        func open(_ index: Int) {
+            guard request == token else { return }
+            guard index < routes.count else { finish(false, message: "Cannot open the selected JIT app. Choose a route in Launch Support."); return }
+            let chosen = routes[index]
+            let destination = chosen == .stikdebug ? url : liveContainerURL(for: url, scheme: chosen.rawValue)
+            guard let destination else { open(index + 1); return }
+            UIApplication.shared.open(destination, options: [:]) { success in
+                guard request == token else { return }
+                guard success else { open(index + 1); return }
+                LogStore.shared.log("Opened \(chosen.title) for JIT.")
+                if !wasDebugged { checking = true; return }
+                activation = Task { @MainActor in
+                    for await _ in NotificationCenter.default.notifications(named: UIApplication.didBecomeActiveNotification) {
+                        guard !Task.isCancelled, request == token else { return }
+                        checking = true
                         return
                     }
-                    finishHandoff(wasAlreadyDebugged: wasAlreadyDebugged, completion: completion)
                 }
-                return
-            }
-
-            finishHandoff(wasAlreadyDebugged: wasAlreadyDebugged, completion: completion)
-        }
-    }
-
-    private static func finishHandoff(
-        wasAlreadyDebugged: Bool,
-        completion: @escaping (Bool) -> Void
-    ) {
-        let poll = {
-            pollForJIT(completion: completion)
-        }
-        guard wasAlreadyDebugged else {
-            poll()
-            return
-        }
-
-        Task { @MainActor in
-            for await _ in NotificationCenter.default.notifications(
-                named: UIApplication.didBecomeActiveNotification
-            ) {
-                poll()
-                break
             }
         }
+        open(0)
     }
 
     // LiveContainer decodes the first query value as a base64-encoded guest URL.
-    static func liveContainerURL(for url: URL) -> URL? {
+    static func liveContainerURL(for url: URL, scheme: String = "livecontainer2") -> URL? {
+        guard scheme == "livecontainer" || scheme == "livecontainer2" else { return nil }
         var components = URLComponents()
-        components.scheme = "livecontainer2"
+        components.scheme = scheme
         components.host = "open-url"
         components.queryItems = [URLQueryItem(name: "url", value: Data(url.absoluteString.utf8).base64EncodedString())]
         return components.url
     }
 
-    /// Poll every 0.5s until CS_DEBUGGED is set, then call completion.
-    private static func pollForJIT(completion: @escaping (Bool) -> Void) {
-        Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { timer in
-            if jit_check_debugged() {
-                timer.invalidate()
-                LogStore.shared.log("JIT enabled! (CS_DEBUGGED set)", level: .success)
-                completion(true)
-            }
+    static func allocateAdaptivePool() -> (rx: UnsafeMutableRawPointer, rw: UnsafeMutableRawPointer, size: Int)? {
+        let requested = UserDefaults.standard.integer(forKey: "IridiumJITPoolMB")
+        let availableMB = Int(os_proc_available_memory() / (1024 * 1024))
+        let cap = [128, 256, 512].contains(requested) ? requested : 512
+        for mb in [512, 256, 128] where mb <= cap && mb <= availableMB / 2 {
+            if let pool = allocatePool(poolSize: mb * 1024 * 1024) { return pool }
         }
+        return nil
     }
+    private static var pinned = false
 
     /// Allocate a JIT memory pool via BRK #0xf00d, then detach the debugger.
     /// Call this after CS_DEBUGGED is confirmed.
@@ -160,7 +178,7 @@ enum StikJITHelper {
         // sequential placements.
         let pinTarget: vm_address_t = 0x119000000
         let maxChunks = 32                 // safety cap (512 MB of reservation)
-        for i in 0..<maxChunks {
+        for i in 0..<(pinned ? 0 : maxChunks) {
             var addr: vm_address_t = 0
             let kr = vm_allocate(mach_task_self_, &addr, vm_size_t(chunkSize), VM_FLAGS_ANYWHERE)
             if kr == KERN_SUCCESS {
@@ -172,6 +190,8 @@ enum StikJITHelper {
                 break
             }
         }
+
+        pinned = true
 
         // Ask debugger to allocate RX pages (x0=0 triggers _M allocation).
         // With pin chunks claimed, this should land at a higher address.
@@ -221,11 +241,7 @@ enum StikJITHelper {
                 : "  bad region kept as pin (vm_deallocate kr=\(dkr))")
         }
         guard let rxPtr = rxPtrOpt else {
-            LogStore.shared.log("BAD POOL: no valid placement after retries. Killing in 10s — please relaunch.", level: .error)
-            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 10) {
-                LogStore.shared.log("BAD POOL — exiting now. Relaunch the app.", level: .error)
-                exit(0)
-            }
+            LogStore.shared.log("JIT pool placement failed.", level: .error)
             return nil
         }
         let rxAddr = Int(bitPattern: rxPtr)
@@ -322,6 +338,7 @@ enum StikJITHelper {
 
         guard kr1 == KERN_SUCCESS else {
             LogStore.shared.log("vm_remap failed: \(kr1)", level: .error)
+            vm_deallocate(mach_task_self_, vm_address_t(bitPattern: rxPtr), vm_size_t(poolSize))
             return nil
         }
 
@@ -330,6 +347,7 @@ enum StikJITHelper {
         guard kr2 == KERN_SUCCESS else {
             LogStore.shared.log("vm_protect(RW) failed: \(kr2)", level: .error)
             vm_deallocate(mach_task_self_, rwAddr, vm_size_t(poolSize))
+            vm_deallocate(mach_task_self_, vm_address_t(bitPattern: rxPtr), vm_size_t(poolSize))
             return nil
         }
 

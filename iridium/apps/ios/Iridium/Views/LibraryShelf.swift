@@ -19,6 +19,7 @@ struct LibraryShelf: View {
     @State private var visible = false
     private enum MenuFocus: Int { case filter, search, add, settings, play, options, covers }
     @State private var menuFocus: MenuFocus = .covers
+    @FocusState private var keyboardFocus: MenuFocus?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
     @FocusState private var searching: Bool
@@ -122,7 +123,9 @@ struct LibraryShelf: View {
         }
         .ignoresSafeArea(.container, edges: .horizontal)
         }
-        .simultaneousGesture(DragGesture(minimumDistance: 0).onChanged { _ in
+        // The shelf supplies its own focus shapes for keyboard and controller input.
+        .focusEffectDisabled(!searchPresented)
+        .simultaneousGesture(TapGesture().onEnded {
             if controller.showingControllerHints { controller.showingControllerHints = false }
         })
         .onChange(of: searchPresented) { _, open in
@@ -213,6 +216,7 @@ struct LibraryShelf: View {
                                         }
                                     }
                                     .onScrollPhaseChange { _, phase in
+                                        if phase == .interacting { controller.showingControllerHints = false }
                                         carouselIsUserDriven = phase == .tracking || phase == .interacting || phase == .decelerating
                                         if phase == .idle { resetCarousel() }
                                     }
@@ -281,7 +285,7 @@ struct LibraryShelf: View {
         Capsule()
             .strokeBorder(.white.opacity(0.85), lineWidth: 1.5)
             .padding(-5)
-            .opacity(controller.showingControllerHints && menuFocus == target ? 1 : 0)
+            .opacity((controller.showingControllerHints && menuFocus == target) || keyboardFocus == target ? 1 : 0)
             .allowsHitTesting(false)
     }
     private func moveSelection(_ offset: Int) {
@@ -301,11 +305,11 @@ struct LibraryShelf: View {
                 Spacer(minLength: 8)
                 Button { menuFocus = .search; searchPresented.toggle(); searching = searchPresented } label: {
                     Image(systemName: "magnifyingglass").frame(width: 44, height: 44)
-                }.overlay { controllerFocus(.search) }.onHover { if $0 { menuFocus = .search } }.accessibilityLabel("Search")
+                }.focused($keyboardFocus, equals: .search).overlay { controllerFocus(.search) }.onHover { if $0 { menuFocus = .search } }.accessibilityLabel("Search")
                 Button { menuFocus = .add; importGame() } label: { Image(systemName: "plus").frame(width: 44, height: 44) }
-                    .overlay { controllerFocus(.add) }.onHover { if $0 { menuFocus = .add } }.focusable(interactions: .edit).accessibilityLabel("Add Game").keyboardShortcut("o", modifiers: .command)
+                    .focused($keyboardFocus, equals: .add).overlay { controllerFocus(.add) }.onHover { if $0 { menuFocus = .add } }.accessibilityLabel("Add Game").keyboardShortcut("o", modifiers: .command)
                 Button { menuFocus = .settings; settings() } label: { Image(systemName: "gearshape").frame(width: 44, height: 44) }
-                    .overlay { controllerFocus(.settings) }.onHover { if $0 { menuFocus = .settings } }.focusable(interactions: .edit).accessibilityLabel("Settings")
+                    .focused($keyboardFocus, equals: .settings).overlay { controllerFocus(.settings) }.onHover { if $0 { menuFocus = .settings } }.accessibilityLabel("Settings")
             }.buttonStyle(.plain)
             if !landscape { libraryFilter }
         }
@@ -316,7 +320,7 @@ struct LibraryShelf: View {
         Picker("Library filter", selection: Binding(get: { favorites }, set: { menuFocus = .filter; favorites = $0 })) {
             Text("All Games").tag(false)
             Text("Favorites").tag(true)
-        }.pickerStyle(.segmented).overlay { controllerFocus(.filter) }.onHover { if $0 { menuFocus = .filter } }
+        }.pickerStyle(.segmented).focused($keyboardFocus, equals: .filter).overlay { controllerFocus(.filter) }.onHover { if $0 { menuFocus = .filter } }
         if controller.showingControllerHints { shoulderHint("RB") }
         }
     }
@@ -331,14 +335,14 @@ struct LibraryShelf: View {
                 Button { menuFocus = .play; searching = false; play(game) } label: {
                     Label { Text(launchTitle(game)).fontWeight(.semibold) } icon: { inputIcon("play.fill", position: 1) }
                         .padding(.horizontal, 12).frame(minHeight: 34)
-                }.libraryGlass(prominent: true).disabled(disabled(game)).overlay { controllerFocus(.play) }.onHover { if $0 { menuFocus = .play } }
+                }.libraryGlass(prominent: true).disabled(disabled(game)).focused($keyboardFocus, equals: .play).overlay { controllerFocus(.play) }.onHover { if $0 { menuFocus = .play } }
                 Button { menuFocus = .options; details(game) } label: {
                     Label { Text("Game Options") } icon: { Group {
                         if controller.showingControllerHints { Image(systemName: "line.3.horizontal.circle") }
                         else { Image(systemName: "ellipsis") }
                     } }
                         .frame(minHeight: 44)
-                }.buttonStyle(.plain).overlay { controllerFocus(.options) }.onHover { if $0 { menuFocus = .options } }.focusable(interactions: .edit).accessibilityIdentifier("gameOptions")
+                }.buttonStyle(.plain).focused($keyboardFocus, equals: .options).overlay { controllerFocus(.options) }.onHover { if $0 { menuFocus = .options } }.accessibilityIdentifier("gameOptions")
             }
             if showReason, let reason = launchDetail(game) {
                 Text(reason).font(.footnote).foregroundStyle(.secondary).lineLimit(landscape ? 1 : 2)

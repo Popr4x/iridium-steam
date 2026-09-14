@@ -1603,7 +1603,7 @@ final class IridiumRuntimeTests: XCTestCase {
         XCTAssertEqual(snapshot.launchStatus, "bootstrapReady")
         XCTAssertEqual(
             snapshot.launchStatusSummary,
-            "JIT and embedded bootstrap are ready; Wine server, Windows process, and first-frame milestones are not yet verified."
+            "JIT is ready. No game startup or rendered frame has been recorded."
         )
         XCTAssertFalse(snapshot.usesLightweightDebuggerCheck)
         XCTAssertFalse(
@@ -2425,7 +2425,7 @@ final class IridiumRuntimeTests: XCTestCase {
         XCTAssertEqual(report.status, .degraded)
         XCTAssertTrue(
             report.notes.contains(
-                "Embedded launch bootstrap is ready, but the runtime is not yet playable on this host."
+                "The runtime has not started its display, input, and audio services."
             )
         )
         XCTAssertTrue(
@@ -2443,7 +2443,7 @@ final class IridiumRuntimeTests: XCTestCase {
         let runtimeRoot = root.appending(path: "Runtime", directoryHint: .isDirectory)
         let bundle = try materializeRuntimeBundle(root: runtimeRoot)
         let summary =
-            "JIT and embedded bootstrap are ready; Wine server, Windows process, and first-frame milestones are not yet verified."
+            "JIT is ready. No game startup or rendered frame has been recorded."
         let snapshot = HostCapabilitySnapshot(
             jitStatus: .ready,
             availableManagedStorageGB: 64,
@@ -2592,7 +2592,7 @@ final class IridiumRuntimeTests: XCTestCase {
         XCTAssertEqual(report.status, .degraded)
         XCTAssertEqual(
             detail,
-            "Embedded launch bootstrap is ready, but the runtime is not yet playable on this host."
+            "The runtime has not started its display, input, and audio services."
         )
         XCTAssertTrue(
             report.notes.contains(

@@ -13,13 +13,19 @@ enum MadeiraRuntimeAdapter {
         return selection != "legacy"
     }()
     private(set) static var started = false
+    static var resolution = MadeiraResolution.selected
+    private static var launchID = UUID()
+    private static var wineStarted = false
     private static var combatProfile: MadeiraCombatProfile?
 
-    static func start(executable: String, gameRoot: String, gameID: UUID, report: @escaping (String) -> Void) {
+    static func start(executable: String, gameRoot: String, gameID: UUID, report: @escaping (String) -> Void, fail: @escaping (String) -> Void) {
         guard !started else { report("Restart Iridium before another Madeira session."); return }
         started = true
+        let token = UUID()
+        launchID = token
+        resolution = .selected
         #if BUILTIN_STIKJIT
-        let useBuiltinJIT = BuiltinJIT.selected
+        var useBuiltinJIT = BuiltinJIT.selected && !StikJITHelper.persistentScriptRequested
         #endif
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let prefix = docs.appendingPathComponent("MadeiraTestPrefixes/\(gameID.uuidString)")
@@ -29,23 +35,25 @@ enum MadeiraRuntimeAdapter {
             UserDefaults.standard.set(trace == "1", forKey: "IridiumMediaTrace")
         }
         setenv("IRIDIUM_MEDIA_TRACE", UserDefaults.standard.bool(forKey: "IridiumMediaTrace") ? "1" : "0", 1)
-        if let profile = ProcessInfo.processInfo.environment["IRIDIUM_COMBAT_PROFILE"] {
-            UserDefaults.standard.set(profile == "1", forKey: "IridiumCombatProfile")
+        if let profile = ProcessInfo.processInfo.environment["IRIDIUM_HOLLOW_KNIGHT_DIAGNOSTICS"] {
+            UserDefaults.standard.set(profile == "1", forKey: "IridiumHollowKnightDiagnostics")
         }
-        if UserDefaults.standard.bool(forKey: "IridiumCombatProfile") {
+        if UserDefaults.standard.bool(forKey: "IridiumHollowKnightDiagnostics"),
+           URL(fileURLWithPath: executable).lastPathComponent.lowercased() == "hollow_knight.exe" {
             do { combatProfile = try MadeiraCombatProfile(prefix: prefix) }
             catch { report("Combat log could not start: \(error.localizedDescription)") }
         }
         let cube = UserDefaults.standard.string(forKey: "IridiumMadeiraTest") == "cube"
         setenv("MADEIRA_EXE", cube ? "cube-x64.exe" : executable, 1)
         setenv("MADEIRA_USE_ARM64EC", "1", 1)
-        setenv("MADEIRA_SCREEN_W", "960", 1)
-        setenv("MADEIRA_SCREEN_H", "540", 1)
+        setenv("MADEIRA_SCREEN_W", String(resolution.rawValue), 1)
+        setenv("MADEIRA_SCREEN_H", String(resolution.height), 1)
         unsetenv("MADEIRA_ARGS")
         jit_install_trap_handler()
         _ = LogStore.shared
         RuntimeLogCapture.writeLine("[Launch] Waiting for JIT permission.")
         let boot = {
+            guard launchID == token else { return }
             // Keep the request only across the JIT handoff, never across a game crash.
             UserDefaults.standard.removeObject(forKey: "IridiumPendingMadeiraLaunchTitle")
             RuntimeLogCapture.writeLine("[Launch] JIT handoff complete. Automatic resume request cleared.")
@@ -72,9 +80,10 @@ enum MadeiraRuntimeAdapter {
                         return
                     }
                 }
+                guard DispatchQueue.main.sync(execute: { launchID == token }) else { return }
                 RuntimeLogCapture.writeLine("[Launch] Reserving memory for translated game code.")
-                guard let pool = StikJITHelper.allocatePool(poolSize: 512 * 1024 * 1024) else {
-                    DispatchQueue.main.async { report("Madeira JIT pool allocation failed.") }
+                guard let pool = StikJITHelper.allocateAdaptivePool() else {
+                    DispatchQueue.main.async { fail("Cannot allocate JIT memory. Restart Iridium, then try a smaller JIT memory limit in Runtime settings.") }
                     return
                 }
                 setenv("WINE_IOS_JIT_RX", String(UInt(bitPattern: pool.rx), radix: 16), 1)
@@ -88,6 +97,14 @@ enum MadeiraRuntimeAdapter {
                     return
                 }
                 #endif
+                guard DispatchQueue.main.sync(execute: { launchID == token }) else { return }
+                guard winios_reserve_fex_memory() != 0 else {
+                    DispatchQueue.main.async {
+                        fail("Cannot start the runtime: this app process has too little usable address space. Restart Iridium and try again.")
+                    }
+                    return
+                }
+                DispatchQueue.main.sync { wineStarted = true }
                 ws_log_quiet = 1
                 guard wineserver_start(prefix.path) == 0 else {
                     DispatchQueue.main.async { report("Madeira Wine server failed to start.") }
@@ -101,22 +118,30 @@ enum MadeiraRuntimeAdapter {
                 }
             }
         }
+        let startExternalJIT = {
+            if jit_check_debugged() && StikJITHelper.persistentScriptRequested {
+                StikJITHelper.consumePersistentScriptRequest()
+                boot()
+            } else {
+                StikJITHelper.enableJIT { ready in
+                    if ready {
+                        StikJITHelper.consumePersistentScriptRequest()
+                        boot()
+                    } else { started = false; fail(StikJITHelper.lastFailure) }
+                }
+            }
+        }
         #if BUILTIN_STIKJIT
         if useBuiltinJIT {
-            if !BuiltinJIT.shared.start(onListening: boot, report: report) { started = false }
+            if !BuiltinJIT.shared.start(onListening: boot, report: fail, onUnavailable: {
+                useBuiltinJIT = false
+                report("Opening the external JIT app.")
+                startExternalJIT()
+            }) { started = false }
             return
         }
         #endif
-        if jit_check_debugged() && StikJITHelper.persistentScriptRequested {
-            StikJITHelper.consumePersistentScriptRequest()
-            boot()
-        }
-        else { StikJITHelper.enableJIT { ready in
-            if ready {
-                StikJITHelper.consumePersistentScriptRequest()
-                boot()
-            } else { report("Cannot open StikDebug through LiveContainer2.") }
-        } }
+        startExternalJIT()
     }
 
     private static let controllerQueue = DispatchQueue(label: "iridium.madeira.keys")
@@ -129,6 +154,14 @@ enum MadeiraRuntimeAdapter {
     }
 
     static func stop() {
+        launchID = UUID()
+        StikJITHelper.cancel()
+        #if BUILTIN_STIKJIT
+        BuiltinJIT.shared.cancel()
+        #endif
+        combatProfile?.stop()
+        combatProfile = nil
+        guard wineStarted else { started = false; return }
         releaseKeys()
         // Madeira cannot safely reinitialize all process-global Wine/FEX state yet.
         // Keep this process single-session; preserve the test prefix on shutdown.
@@ -140,7 +173,8 @@ enum MadeiraRuntimeAdapter {
 
     static func input(type: String, phase: String, x: CGFloat?, y: CGFloat?, value: Double, name: String) {
         if type == "touch", let x, let y {
-            let px = Int32(x * 960), py = Int32(y * 540)
+            let px = Int32(min(max(x, 0), 1) * CGFloat(resolution.rawValue - 1))
+            let py = Int32(min(max(y, 0), 1) * CGFloat(resolution.height - 1))
             switch phase {
             case "began": winios_post_touch_down(px, py)
             case "ended", "cancelled": winios_post_touch_up(px, py)

@@ -4,23 +4,12 @@ This runbook covers the lab-only acceptance flow for real licensed Windows game 
 
 Use this with licensed local payloads only. These checks are intended for manual device labs, not CI.
 
-## Current reality
+## Scope
 
-- The app/store/runtime shell is in place.
-- The bundled local runtime path is the intended product path.
-- The Wine direct-launch path, FEX session lifecycle, runtime SDK host reporting, and SwiftUI readiness surfaces are now wired to fail honestly instead of returning placeholder success.
-- The iPhone first-playable path now reserves live render, input, and audio services before launch, hands successful launch into a fullscreen player, and monitors terminal completion after handoff.
-- The service registry is now the source of truth for local `presentationReadiness`, `inputReadiness`, `audioReadiness`, and `playabilityReady`; a lab run must still prove those registered services are backed by real guest render, input, and audio behavior on physical hardware.
-- The direct-launch Wine path is now seeded to use `wineios.drv` for fullscreen windowing/input and `winecoreaudio.drv` for playback output on the iPhone slice.
-- The canonical embedded FEX producer is now platform-scoped:
-  - `../iridium-fex-ios/iridium/ios/build_embedded_translator.sh --platform host`
-  - `../iridium-fex-ios/iridium/ios/build_embedded_translator.sh --platform device`
-  - `../iridium-fex-ios/iridium/ios/build_embedded_translator.sh --platform simulator`
-- Generic iOS builds are expected to fail fast if the `iphoneos` translator artifact is missing or mismatched.
-- Simulator test bundles are expected to fail fast if the `iphonesimulator` translator artifact is missing or mismatched.
-- Physical-device launch readiness now depends on the real `iphoneos` artifact and external JIT enablement, not on the old fallback source bridge.
-
-So this runbook is the target acceptance flow for the real engine path, not a guarantee that the current workspace already passes every physical-device step. Passing local tests or a generic iOS build is only permission to enter this runbook; it is not Phase 2C acceptance.
+Test the selected runtime with licensed game files on a physical device.
+Record rendering, input, audio, save persistence, and shutdown separately.
+For legacy embedded-runtime tests, build the matching host, device, or simulator
+translator artifact before starting the checks below.
 
 ## Preconditions
 
@@ -191,28 +180,8 @@ Use this flow only when a real Steam path is being exercised intentionally on to
 - Runtime evidence references the imported executable fingerprint or the registered Steam artifact.
 - Explicit host-capability gating, storage gating, and whitelist policy are enforced when the selected runtime policy requires them.
 
-## Current blocker
+## Record the result
 
-The remaining blocker for full physical-device acceptance is no longer build-time translator slice selection or the absence of a playability service registry. The verified matrix now proves that generic iOS app builds consume the real `iphoneos` embedded FEX artifact and simulator test bundles consume the real `iphonesimulator` artifact, while local tests prove registry-backed playability readiness. The remaining blocker is physical-device proof beyond those proxy gates: an attached JIT-enabled device plus guest execution that stays `launchReady = true` and `playabilityReady = true` while a real Windows title renders a frame, receives input, initializes audio, and survives the remaining syscall, external symbol, TLS, process/thread, and signal/exception bring-up work.
-
-## Failure Checklist
-
-For every failed run, capture:
-
-- game id and title
-- runtime bundle id/version
-- prefix id
-- host session id
-- launch status and launch status summary
-- terminal status
-- runtime failure code and reason
-- telemetry snapshot
-- mitigation action
-
-Reject the build immediately if any run:
-
-- exposes a Windows desktop, explorer, or shell
-- bypasses prefix bootstrap
-- launches after the runtime host reported launch support as unavailable
-- loses install resume state
-- fails without a structured persisted reason
+Record the app build, selected runtime, device model, OS version, game, input
+method, and observed failures. Keep private device identifiers and raw logs out
+of public reports. Follow the repository release policy for acceptance.

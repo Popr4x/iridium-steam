@@ -64,7 +64,7 @@ struct SettingsView: View {
 
             Section("About") {
                 MenuValue("Version", value: version)
-                Text("Your games, artwork, controls, and saves stay together in Iridium.")
+                Text("Manage launch support, artwork, and storage.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }.listRowBackground(RoundedRectangle(cornerRadius: 16).fill(Color.white.opacity(0.06)).padding(.vertical, 2)).listRowSeparator(.hidden)
@@ -165,7 +165,7 @@ private struct LaunchSupportSettingsView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     } else {
-                        Text("JIT lets Iridium translate Windows game code. Enabling it does not confirm that a game will run.")
+                        Text("JIT lets Iridium translate Windows game code. Follow the setup steps to enable it.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -194,6 +194,11 @@ private struct LaunchSupportSettingsView: View {
             }.listRowBackground(RoundedRectangle(cornerRadius: 16).fill(Color.white.opacity(0.06)).padding(.vertical, 2)).listRowSeparator(.hidden)
 
             }
+            #if MADEIRA_RUNTIME
+            if viewModel.usesMadeiraRuntime {
+                MenuNavigationLink("External JIT App") { ExternalJITRoutesView() }
+            }
+            #endif
             Section("Actions") {
                 if let jitToolActionTitle = viewModel.jitToolActionTitle {
                     MenuButton {
@@ -275,6 +280,11 @@ private struct RuntimeSettingsView: View {
 
     var body: some View {
         List {
+            #if MADEIRA_RUNTIME
+            if viewModel.usesMadeiraRuntime {
+                MenuNavigationLink("Display & Memory") { RuntimeLaunchPreferences() }
+            }
+            #endif
             Section("Runtime") {
                 MenuValue("Status", value: viewModel.activeRuntimeHealth.status.displayName)
                 if viewModel.usesMadeiraRuntime {
@@ -378,7 +388,7 @@ private struct StorageSettingsView: View {
                     MenuValue("Available", value: bytes(free))
                     MenuValue("Used", value: bytes(max(0, capacity - free)))
                     MenuValue("Total Capacity", value: bytes(capacity))
-                    Text("Used space includes iOS and all apps. These figures come from the device, not game-size estimates.")
+                    Text("Used space includes iOS, apps, and their data.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 if let failure { Text(failure).foregroundStyle(.secondary) }
@@ -386,7 +396,7 @@ private struct StorageSettingsView: View {
             }
             Section("Library") {
                 MenuValue("Registered Games", value: String(viewModel.games.count))
-                Text("Game folders can be outside Iridium or shared with other entries. They are not counted as separate copies here. Manage each game's files through Game Options → Files & Saves.")
+                Text("Manage each game's files through Game Options → Files & Saves. Multiple library entries can share a game folder.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
         }
@@ -445,3 +455,65 @@ private struct DiagnosticsSettingsView: View {
         .iridiumListChrome()
     }
 }
+
+#if MADEIRA_RUNTIME
+private struct RuntimeLaunchPreferences: View {
+    @AppStorage(MadeiraResolution.key) private var width = 960
+    @AppStorage("IridiumJITPoolMB") private var pool = 0
+    var body: some View {
+        List {
+            Section("Display Resolution") {
+                ForEach(MadeiraResolution.allCases, id: \.rawValue) { resolution in
+                    MenuButton { width = resolution.rawValue } label: {
+                        HStack {
+                            Text(resolution.title)
+                            Spacer()
+                            if width == resolution.rawValue { Image(systemName: "checkmark") }
+                        }
+                    }
+                }
+                Text("Applies to the next game launch. Lower resolutions reduce graphics work.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+            Section("JIT Memory Limit") {
+                ForEach([0, 128, 256, 512], id: \.self) { mb in
+                    MenuButton { pool = mb } label: {
+                        HStack {
+                            Text(mb == 0 ? "Automatic" : "\(mb) MB")
+                            Spacer()
+                            if pool == mb { Image(systemName: "checkmark") }
+                        }
+                    }
+                }
+                Text("Iridium can use a smaller pool when memory is limited. Some games need more code memory.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("Display & Memory")
+        .navigationBarTitleDisplayMode(.inline)
+        .iridiumListChrome()
+    }
+}
+
+private struct ExternalJITRoutesView: View {
+    @AppStorage(StikJITHelper.routeKey) private var route = "automatic"
+    var body: some View {
+        List {
+            ForEach(StikJITHelper.Route.allCases, id: \.rawValue) { option in
+                MenuButton { route = option.rawValue } label: {
+                    HStack {
+                        Text(option.title)
+                        Spacer()
+                        if route == option.rawValue { Image(systemName: "checkmark") }
+                    }
+                }
+            }
+            Text("Automatic tries LiveContainer2, StikDebug, then LiveContainer. StikDebug must be installed inside the selected container.")
+                .font(.footnote).foregroundStyle(.secondary)
+        }
+        .navigationTitle("External JIT App")
+        .navigationBarTitleDisplayMode(.inline)
+        .iridiumListChrome()
+    }
+}
+#endif

@@ -1,50 +1,57 @@
-# Product experience
+# Using Iridium
 
-Iridium's product interface is organized around one outcome: getting from a newly installed app to a first playable Windows-game session without requiring the user to understand the runtime architecture.
+## Add a game
 
-## Activation model
+Choose **Add Game (+)** in the library, then select the folder containing the
+Windows game and its `.exe` file. Confirm the game name and executable.
+If several executables are found, choose the one that starts the game.
+Custom and unreleased games can use their own names and images.
 
-The Library derives one primary action from durable app state:
+Artwork is optional. Edit the name, catalog match, cover, or background in
+**Game Options → Rename & Artwork**. Artwork matching is independent of game
+compatibility.
 
-1. Repair LiveContainer integration when its folder picker or launch settings are incomplete.
-2. Restart Iridium when a repair cannot affect the already-running hosted process.
-3. Import a Windows game folder when the library is empty.
-4. Restore external launch support when JIT or the runtime launch bridge is unavailable.
-5. Resolve a game-specific compatibility blocker.
-6. Play a ready game.
+## Choose and play
 
-`ProductActivationState` owns this ordering and its user-facing copy. Views should not recreate the decision tree with independent warning banners.
+Use **All Games** or **Favorites** to browse. Search finds games in your library.
+Select a cover and choose **Play**. When setup needs attention, follow the action
+shown beside the launch message, such as locating a game file or enabling JIT.
 
-## Information architecture
+JIT allows the runtime to translate Windows game code. Launch Support in Settings
+contains setup options. External StikDebug setup uses LiveContainer2. A prompt to
+restart Iridium requires closing and reopening the app before continuing.
+Compatibility and performance vary by game, runtime, and device.
 
-The root interface has three destinations:
+## Game Options
 
-- **Library** — setup, import, game selection, and the next action required to play.
-- **Activity** — imports, compatibility checks, environment maintenance, queued launches, and launch results.
-- **Settings** — app-wide launch support, runtime, storage, diagnostics, and version information.
+- **Rename & Artwork:** edit the game's name and images.
+- **Controls:** view connected devices and input guidance.
+- **Files & Saves:** view the game folder and available save information.
+- **Advanced:** launch arguments and runtime settings.
+- **Remove from Library:** remove the entry while keeping game files and saves.
 
-Controls, compatibility, storage, saves, and Windows-environment maintenance belong to a specific game and therefore live under Game Detail. The retired root-level Prefixes and Input screens must not be restored as parallel management surfaces.
+Use Game Options to add a game to Favorites. Save locations vary by game; check
+the game's documentation before backing up or moving save files.
 
-## Interaction principles
+## During play
 
-- Show one prominent next action before technical status.
-- Describe JIT as **launch support** in primary flows; retain exact JIT terminology in setup and diagnostics.
-- Keep errors actionable: say what is blocked, preserve imported data, and expose the recovery action beside the message.
-- Treat LiveContainer repair as process-scoped. When a relaunch is required, do not imply that an in-process recheck can apply the repaired picker hook.
-- Keep destructive Windows-environment operations behind confirmation and state what is retained.
-- Move session identifiers, graphics paths, frame surfaces, and bridge telemetry behind progressive disclosure.
-- Let runtime-player controls auto-hide only after the first guest frame. Startup and failure state must remain visible.
+Open the menu at the right edge for **Resume**, **Controls**, **Performance**, or
+**Close Game**. Tap outside the menu to dismiss it. Closing a game asks for
+confirmation because unsaved progress may be lost. **View Log** opens the full
+session log when troubleshooting.
 
-## Accessibility and visual behavior
+## Settings and support
 
-Product cards use semantic system colors and support light and dark appearance. At accessibility Dynamic Type sizes, artwork and copy stack vertically rather than compressing text into narrow columns. Buttons keep system control sizing, icons have text alternatives or are hidden when decorative, and Reduce Motion disables the runtime player's chrome animation.
+Settings contains launch support, runtime information, artwork settings, storage,
+and diagnostics. Storage shows the device's capacity and available space.
+Use diagnostics to export logs when reporting an import or launch problem.
 
-## Verification
+## Interface writing
 
-Changes to this experience should preserve:
+Describe the current action, result, or next step. Keep labels consistent with
+the screen they open. Explain compatibility limits where they affect a choice,
+and state data-loss risks before destructive actions. Put implementation history
+in dated engineering records and release notes.
 
-- unit coverage for every activation-state transition;
-- a successful iOS simulator build using the current Xcode beta;
-- light, dark, and accessibility-size screenshot checks on a compact iPhone layout;
-- the existing import, JIT, runtime, and store test suites;
-- physical-device validation as the only proof of a real first rendered game frame.
+References: [Apple writing guidance](https://developer.apple.com/design/human-interface-guidelines/writing)
+and [GOV.UK interface writing](https://www.gov.uk/service-manual/design/writing-for-user-interfaces).

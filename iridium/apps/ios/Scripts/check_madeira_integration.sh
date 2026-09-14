@@ -17,6 +17,16 @@ xcrun swiftc "$root/MadeiraSupport/MadeiraLaunchReadiness.swift" \
 xcrun swiftc "$root/MadeiraSupport/MadeiraPointerContact.swift" \
   "$root/MadeiraSupportTests/PointerContactCheck.swift" -o "$check_binary"
 "$check_binary"
+python3 "$root/MadeiraSupportTests/HardwareKeyboardCheck.py"
+python3 "$root/MadeiraSupportTests/CursorCheck.py"
+python3 "$root/MadeiraSupportTests/InputDeliveryCheck.py"
+python3 "$root/MadeiraSupportTests/InputWaitCheck.py"
+python3 "$root/MadeiraSupportTests/KeyboardScanCheck.py"
+python3 "$root/MadeiraSupportTests/HostArenaCheck.py"
+python3 "$root/MadeiraSupportTests/JITWaitCheck.py"
+xcrun swiftc "$root/MadeiraSupport/MadeiraLaunchOptions.swift" \
+  "$root/MadeiraSupportTests/LaunchOptionsCheck.swift" -o "$check_binary"
+"$check_binary"
 if [ "$#" -gt 0 ]; then
   app=$1
   codesign --verify --deep --strict "$app"

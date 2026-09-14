@@ -38,9 +38,9 @@ final class BuiltinJIT: NSObject, JITHost {
     private var deadline: DispatchWorkItem?
     private let detached = DispatchGroup()
 
-    // Call on the main thread. A failed/expired session is never silently sent to another provider.
+    // Call on the main thread. Only a failure before worker connection may use another provider.
     @discardableResult
-    func start(onListening: @escaping () -> Void, report: @escaping (String) -> Void) -> Bool {
+    func start(onListening: @escaping () -> Void, report: @escaping (String) -> Void, onUnavailable: (() -> Void)? = nil) -> Bool {
         dispatchPrecondition(condition: .onQueue(.main))
         guard launcher == nil else { report("Restart Iridium before another built-in JIT attempt."); return false }
         guard #available(iOS 27, *) else { report("Built-in JIT requires iOS 27 or later."); return false }
@@ -58,9 +58,23 @@ final class BuiltinJIT: NSObject, JITHost {
         launcher.failureHandler = { [weak self] message in self?.finished(message) }
         RuntimeLogCapture.writeLine("[Launch] Starting the built-in JIT helper.")
         launcher.start(withHost: self, hostProtocol: JITHost.self, workerProtocol: JITWorker.self) { [weak self] worker, error in
-            guard let self else { return }
+            guard let self, !self.operationFinished else { return }
             guard let worker = worker as? JITWorker else {
-                self.finished(error?.localizedDescription ?? "The built-in JIT helper did not start."); return
+                let message = error?.localizedDescription ?? "The built-in JIT helper did not start."
+                if !self.listening && self.worker == nil && !jit_check_debugged(), let onUnavailable {
+                    // No worker received enable(), so there is no helper-owned debugger to detach.
+                    self.operationFinished = true
+                    self.deadline?.cancel()
+                    self.onListening = nil
+                    self.detached.leave()
+                    self.launcher?.failureHandler = nil
+                    self.launcher?.invalidate()
+                    RuntimeLogCapture.writeLine("[Launch] \(message) Continuing with the external JIT app.")
+                    onUnavailable()
+                } else {
+                    self.finished(message)
+                }
+                return
             }
             self.worker = worker
             worker.enable(getpid(), pairing: data)
@@ -110,6 +124,13 @@ final class BuiltinJIT: NSObject, JITHost {
             if finishedSuccessfully { launcher?.invalidate(); worker = nil }
         }
     }
+    func cancel() {
+        guard launcher != nil, !operationFinished else { return }
+        // Stop the launch callback. Do not terminate a helper that may own the debugger.
+        onListening = nil
+        finished("JIT request cancelled. Restart Iridium before another attempt.")
+    }
+
     func waitForDetach() -> Bool {
         dispatchPrecondition(condition: .notOnQueue(.main))
         guard detached.wait(timeout: .now() + 30) == .success else { return false }

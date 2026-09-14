@@ -76,7 +76,7 @@ cd ../iridium
 
 These commands populate the canonical manifests and archives used by the native runtime and Xcode linker. The default-root `device` and `simulator` builds also refresh the SDK-specific alias roots `build-iridium-ios-iphoneos` and `build-iridium-ios-iphonesimulator`; the app and test consumers use those SDK-specific aliases rather than relying on `build-iridium-ios-current`.
 
-Swift package resolution no longer aborts merely because unrelated platform archives are absent. A valid host archive enables the translator-backed macOS package path; otherwise that path uses the source fallback. The Xcode app target always expects the matching device or simulator archive so it cannot silently link the source fallback in place of FEXCore.
+A valid host archive enables the translator-backed macOS package path. Package resolution uses the source fallback when a host archive is unavailable. The Xcode app target always expects the matching device or simulator archive so it cannot silently link the source fallback in place of FEXCore.
 
 The Xcode target runs `apps/ios/Scripts/prepare_embedded_translator.sh` and selects `host`, `device`, or `simulator` from `PLATFORM_NAME`. It refreshes the archive when CMake is available, or reuses an existing nonempty archive with a matching canonical manifest. Set `IRIDIUM_REBUILD_EMBEDDED_TRANSLATOR=1` to reject reuse when CMake is unavailable.
 
@@ -139,17 +139,19 @@ The recommended first steps are:
 4. Prefer extending existing package seams before inventing new ones.
 5. Update docs when the implementation changes the plan.
 
-## Current milestone
+## Runtime validation
 
-The repo is no longer just a thin scaffold:
+Use the [manual validation runbook](manual-validation-runbook.md) to check
+rendering, input, audio, saves, and shutdown on a physical device. Check the
+runtime selected by the app; results from one runtime do not validate another.
 
-- Root package manifest is present.
-- `core` includes a persisted snapshot store, import-first library state, prefix lifecycle, pending-launch truth, launch history, and runtime-health state.
-- `runtime` and `profiles` provide the shared runtime, host-capability, launch-planning, and compatibility seams.
-- Runtime health and launch readiness now surface the exact embedded-host blocker instead of generic placeholder validation text.
-- An iOS app target spec and SwiftUI shell exist in `apps/ios`.
-- `../iridium-runtime-sdk` owns the native host contract and runtime-bundle assembly path.
-- `../iridium-fex-ios` and `../iridium-wine-ios` own the source forks for the iOS engine port.
-- The FEX iOS bridge now has a real in-process ELF guest loader: PT_LOAD mapping, relocations, amd64 System V process image, and FEXCore ExecuteThread() dispatch. Embedded host tests pass.
+### Display and JIT memory
 
-The active blockers are now beyond the local structural readiness gate: broader Wine-grade syscall/signal/exception/process/thread behavior, full runtime TLS/thread setup, and physical-device proof of one launched Windows executable. See [Phase 2 Completion Audit](phase-2-completion-audit.md) for the current evidence checklist and the remaining Phase 2C exit criteria.
+In Settings → Runtime → Display & Memory, choose the resolution and the maximum
+JIT code pool size for the next launch. Automatic checks the current app memory
+limit and tries smaller pools if an allocation fails. A smaller pool can limit
+which games can run.
+
+In Launch Support → External JIT App, select StikDebug, LiveContainer, or
+LiveContainer2. Automatic tries LiveContainer2 first. JIT requests expire after
+three minutes. Close the player to cancel a pending launch.

@@ -22,6 +22,8 @@ final class JITRequestHandler: NSObject, NSExtensionRequestHandling, JITWorker {
             connection.resume()
             self.connection = connection
             host = connection.remoteObjectProxy as? JITHost
+            // XPC connects lazily. Send a message so the host can accept us and send enable().
+            host?.preparation("Built-in JIT helper connected.")
         } catch { context.cancelRequest(withError: error) }
     }
 

@@ -670,7 +670,7 @@ public struct LaunchEligibilityAuditor: Sendable {
                 title: "Install pipeline",
                 detail: game.source == .steam
                     ? "Steam library entry is not resolved yet."
-                    : "Manual import does not require depot orchestration.",
+                    : "Game added from a local folder.",
                 status: game.source == .steam ? .warning : .ready
             )
         }

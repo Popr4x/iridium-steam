@@ -374,6 +374,11 @@ private final class RuntimePlayerPreparedSession {
     }
 
     private static func defaultSurfaceSize() -> (width: Int, height: Int) {
+        #if MADEIRA_RUNTIME
+        if MadeiraRuntimeAdapter.enabled {
+            return (MadeiraResolution.selected.rawValue, MadeiraResolution.selected.height)
+        }
+        #endif
         #if os(iOS)
             let nativeBounds = UIScreen.main.nativeBounds
             return runtimePlayerSurfaceSize(
@@ -583,18 +588,24 @@ final class AppViewModel: ObservableObject {
         if autoRefresh {
             Task {
                 await refresh()
-                #if DEBUG && os(iOS)
+                #if os(iOS)
                 #if MADEIRA_RUNTIME
-                let autoLaunchTitle = MadeiraRuntimeAdapter.enabled
-                    ? (UserDefaults.standard.string(forKey: "IridiumPendingMadeiraLaunchTitle")
-                        ?? ProcessInfo.processInfo.environment["IRIDIUM_DEBUG_LAUNCH_TITLE"])
-                    : ProcessInfo.processInfo.environment["IRIDIUM_DEBUG_LAUNCH_TITLE"]
-                #else
-                let autoLaunchTitle = ProcessInfo.processInfo.environment["IRIDIUM_DEBUG_LAUNCH_TITLE"]
+                // JIT can restart the app. Restore this user request in Release too.
+                if MadeiraRuntimeAdapter.enabled,
+                   let title = UserDefaults.standard.string(forKey: "IridiumPendingMadeiraLaunchTitle") {
+                    if let game = games.first(where: { $0.title == title }) {
+                        RuntimeLogCapture.writeLine("[Launch] Restoring the game after JIT handoff.")
+                        recordLaunchPreparation(for: game)
+                    } else {
+                        UserDefaults.standard.removeObject(forKey: "IridiumPendingMadeiraLaunchTitle")
+                        activityStatusMessage = "The requested game is no longer in your library."
+                    }
+                    return
+                }
                 #endif
-                if let title = autoLaunchTitle,
+                #if DEBUG
+                if let title = ProcessInfo.processInfo.environment["IRIDIUM_DEBUG_LAUNCH_TITLE"],
                    let game = games.first(where: { $0.title == title }) {
-                    print("[IridiumRuntime] debug launch requested: \(title)")
                     recordLaunchPreparation(for: game)
                     #if MADEIRA_RUNTIME
                     if !MadeiraRuntimeAdapter.enabled && jitStatus != .ready { enableJITWithRecommendedTool() }
@@ -602,6 +613,7 @@ final class AppViewModel: ObservableObject {
                     if jitStatus != .ready { enableJITWithRecommendedTool() }
                     #endif
                 }
+                #endif
                 #endif
             }
         }
@@ -1138,7 +1150,7 @@ final class AppViewModel: ObservableObject {
     func validateRuntime() {
         #if MADEIRA_RUNTIME
         if MadeiraRuntimeAdapter.enabled {
-            activityStatusMessage = "Madeira test runtime selected. Device verification is pending."
+            activityStatusMessage = "Madeira runtime selected."
             return
         }
         #endif
@@ -1513,7 +1525,7 @@ final class AppViewModel: ObservableObject {
         #if MADEIRA_RUNTIME
         if MadeiraRuntimeAdapter.enabled {
             UserDefaults.standard.removeObject(forKey: "IridiumPendingMadeiraLaunchTitle")
-            activeRuntimePlayerSession?.statusSummary = "Madeira presented a guest frame. Gameplay verification is pending."
+            activeRuntimePlayerSession?.statusSummary = "The game is displaying frames."
             print("[IridiumMadeira] first-present session=\(sessionIdentifier)")
             return
         }
@@ -1974,6 +1986,14 @@ final class AppViewModel: ObservableObject {
                     self?.activeRuntimePlayerSession?.statusSummary = message
                     self?.activityStatusMessage = message
                     print("[IridiumMadeira] \(message)")
+                } fail: { [weak self] message in
+                    guard let self, self.activeRuntimePlayerSession?.sessionIdentifier == id else { return }
+                    UserDefaults.standard.removeObject(forKey: "IridiumPendingMadeiraLaunchTitle")
+                    self.activeRuntimePlayerSession?.state = .failed
+                    self.activeRuntimePlayerSession?.stateHistory.append(.failed)
+                    self.activeRuntimePlayerSession?.statusSummary = message
+                    self.activityStatusMessage = message
+                    RuntimeLogCapture.writeLine("[Launch] \(message)")
                 }
             }
             return
@@ -3771,14 +3791,14 @@ final class AppViewModel: ObservableObject {
         let summary: String
         if blockedSubsystems.isEmpty {
             summary =
-                "Embedded launch bootstrap is ready, but the runtime is not yet playable on this host."
+                "The runtime has not started its display, input, and audio services."
         } else {
             summary =
                 "Embedded launch bootstrap is ready, but playability is still blocked by \(naturalLanguageList(blockedSubsystems)) support."
         }
 
         return GamePresentationStatus(
-            title: "Not Playable Yet",
+            title: "Runtime Not Ready",
             summary: summary,
             tone: .warning
         )
