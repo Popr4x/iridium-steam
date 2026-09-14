@@ -17,7 +17,8 @@ struct LibraryView: View {
     @EnvironmentObject private var controller: LibraryController
     @State private var selectedID: UUID?
     @State private var search = ""
-    @State private var favorites = false
+    @State private var filter = LibraryFilter.all
+    @State private var showingSteamAccount = false
     @State private var detailGame: GameRecord?
     @State private var appSettings = false
     @State private var importName = ""
@@ -35,12 +36,17 @@ struct LibraryView: View {
             launchTitle: { viewModel.launchActionTitle(for: $0) },
             launchDetail: { viewModel.isLaunchActionDisabled(for: $0) ? viewModel.launchActionDetail(for: $0) : nil },
             details: { detailGame = $0 },
-            search: $search, favorites: $favorites, selectedID: $selectedID,
+            search: $search, filter: $filter, selectedID: $selectedID,
             importGame: { relocatingGame = nil; requestGameImport() }, settings: { appSettings = true },
+            signInToSteam: { showingSteamAccount = true },
             acceptsControllerInput: detailGame == nil && !appSettings && !isPresentingImportPicker && viewModel.importScanResult == nil && !isShowingLiveContainerRepair && artwork.error == nil)
             .toolbar(.hidden, for: .navigationBar)
         }
         }
+        .sheet(isPresented: $showingSteamAccount) {
+            NavigationStack { SteamAccountView(viewModel: viewModel) }
+        }
+        .onAppear { viewModel.configureSteamIntegrationIfNeeded() }
         .safeAreaInset(edge: .bottom) {
             if !appSettings, detailGame == nil, let message = liveContainerIntegrationMessage ?? viewModel.importStatusMessage ?? artwork.lookupNote {
                 Text(message).font(.footnote).padding(12).frame(maxWidth: .infinity).background(.regularMaterial)

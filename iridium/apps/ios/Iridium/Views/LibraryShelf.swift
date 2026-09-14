@@ -1,6 +1,12 @@
 import SwiftUI
 import IridiumCore
 
+enum LibraryFilter: Int, CaseIterable {
+    case all
+    case favorites
+    case steam
+}
+
 struct LibraryShelf: View {
     let games: [GameRecord]
     @ObservedObject var artwork: LibraryArtwork
@@ -11,10 +17,11 @@ struct LibraryShelf: View {
     var launchDetail: (GameRecord) -> String? = { _ in nil }
     let details: (GameRecord) -> Void
     @Binding var search: String
-    @Binding var favorites: Bool
+    @Binding var filter: LibraryFilter
     @Binding var selectedID: UUID?
     var importGame: () -> Void = {}
     var settings: () -> Void = {}
+    var signInToSteam: () -> Void = {}
     var acceptsControllerInput = true
     @State private var visible = false
     private enum MenuFocus: Int { case filter, search, add, settings, play, options, covers }
@@ -27,7 +34,15 @@ struct LibraryShelf: View {
     @State private var carouselPosition = ScrollPosition(idType: Int.self)
     @State private var carouselIsUserDriven = false
     private var filtered: [GameRecord] {
-        games.filter { (!favorites || artwork.appearance($0.id).favorite) && (search.isEmpty || artwork.title($0).localizedCaseInsensitiveContains(search)) }
+        games.filter { game in
+            let matchesFilter: Bool
+            switch filter {
+            case .all: matchesFilter = true
+            case .favorites: matchesFilter = artwork.appearance(game.id).favorite
+            case .steam: matchesFilter = game.source == .steam
+            }
+            return matchesFilter && (search.isEmpty || artwork.title(game).localizedCaseInsensitiveContains(search))
+        }
     }
     private var selected: GameRecord? { filtered.first { $0.id == selectedID } ?? filtered.first }
     var body: some View {
@@ -103,9 +118,15 @@ struct LibraryShelf: View {
                         } else {
                             if !search.isEmpty {
                                 ContentUnavailableView.search(text: search)
-                            } else if favorites {
+                            } else if filter == .favorites {
                                 ContentUnavailableView("No Favorites Yet", systemImage: "heart",
                                     description: Text("Add games through Game Options."))
+                            } else if filter == .steam {
+                                VStack(spacing: 16) {
+                                    ContentUnavailableView("No Steam Games Yet", systemImage: "arrow.down.circle",
+                                        description: Text("Sign in to Steam and install a game from your library."))
+                                    Button("Manage Steam Account", action: signInToSteam).libraryGlass(prominent: true)
+                                }
                             } else {
                                 ContentUnavailableView("Add Your First Game", systemImage: "gamecontroller",
                                     description: Text("Use Add Game (+) above to choose a Windows game folder. Include its .exe file and game data. Artwork is optional."))
@@ -235,7 +256,10 @@ struct LibraryShelf: View {
             return
         }
         if input == .previousTab || input == .nextTab {
-            favorites = input == .nextTab
+            let all = LibraryFilter.allCases
+            let index = all.firstIndex(of: filter) ?? 0
+            let nextIndex = input == .nextTab ? min(all.count - 1, index + 1) : max(0, index - 1)
+            filter = all[nextIndex]
             menuFocus = .covers
             return
         }
@@ -250,8 +274,10 @@ struct LibraryShelf: View {
             let step = input == .left ? -1 : 1
             if menuFocus == .covers { moveSelection(step) }
             else if menuFocus == .filter {
-                if step > 0 && favorites { menuFocus = .search }
-                else { favorites = step > 0 }
+                let all = LibraryFilter.allCases
+                let index = all.firstIndex(of: filter) ?? 0
+                if step > 0 && index == all.count - 1 { menuFocus = .search }
+                else { filter = all[min(all.count - 1, max(0, index + step))] }
             }
             else {
                 let range = menuFocus.rawValue <= MenuFocus.settings.rawValue ? 0...3 : 4...5
@@ -268,7 +294,10 @@ struct LibraryShelf: View {
             if selected == nil { menuFocus = .add }
         case .select:
             switch menuFocus {
-            case .filter: favorites.toggle()
+            case .filter:
+                let all = LibraryFilter.allCases
+                let index = all.firstIndex(of: filter) ?? 0
+                filter = all[(index + 1) % all.count]
             case .search: searchPresented = true; searching = true
             case .add: importGame()
             case .settings: settings()
@@ -317,9 +346,10 @@ struct LibraryShelf: View {
     private var libraryFilter: some View {
         HStack(spacing: 10) {
         if controller.showingControllerHints { shoulderHint("LB") }
-        Picker("Library filter", selection: Binding(get: { favorites }, set: { menuFocus = .filter; favorites = $0 })) {
-            Text("All Games").tag(false)
-            Text("Favorites").tag(true)
+        Picker("Library filter", selection: Binding(get: { filter }, set: { menuFocus = .filter; filter = $0 })) {
+            Text("All Games").tag(LibraryFilter.all)
+            Text("Favorites").tag(LibraryFilter.favorites)
+            Text("Steam").tag(LibraryFilter.steam)
         }.pickerStyle(.segmented).focused($keyboardFocus, equals: .filter).overlay { controllerFocus(.filter) }.onHover { if $0 { menuFocus = .filter } }
         if controller.showingControllerHints { shoulderHint("RB") }
         }

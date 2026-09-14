@@ -51,11 +51,13 @@ let package = Package(
         .library(name: "IridiumCore", targets: ["IridiumCore"]),
         .library(name: "IridiumRuntime", targets: ["IridiumRuntime"]),
         .library(name: "IridiumProfiles", targets: ["IridiumProfiles"]),
+        .library(name: "IridiumSteam", targets: ["IridiumSteam"]),
         .executable(name: "IridiumBridgeHost", targets: ["IridiumBridgeHost"]),
         .executable(name: "IridiumAcceptanceHarness", targets: ["IridiumAcceptanceHarness"]),
     ],
     dependencies: [
-        .package(path: "../iridium-runtime-sdk")
+        .package(path: "../iridium-runtime-sdk"),
+        .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.28.0"),
     ],
     targets: [
         .target(
@@ -71,6 +73,7 @@ let package = Package(
             name: "IridiumRuntime",
             dependencies: [
                 "IridiumCore",
+                "IridiumSteam",
                 .product(name: "IridiumRuntimeHostSDK", package: "iridium-runtime-sdk"),
             ],
             path: "packages/runtime/Sources/IridiumRuntime",
@@ -167,6 +170,20 @@ let package = Package(
             name: "IridiumProfilesTests",
             dependencies: ["IridiumProfiles"],
             path: "packages/profiles/Tests/IridiumProfilesTests"
+        ),
+        .target(
+            name: "IridiumSteam",
+            dependencies: [
+                "IridiumCore",
+                .product(name: "SwiftProtobuf", package: "swift-protobuf"),
+            ],
+            path: "packages/steam/Sources/IridiumSteam",
+            exclude: ["Protos"]
+        ),
+        .testTarget(
+            name: "IridiumSteamTests",
+            dependencies: ["IridiumSteam"],
+            path: "packages/steam/Tests/IridiumSteamTests"
         ),
     ]
 )

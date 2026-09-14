@@ -472,6 +472,7 @@ final class AppViewModel: ObservableObject {
     @Published private(set) var lastJITCheckSummary: String?
     @Published private(set) var jitStreamerAddress = ""
     @Published private(set) var games: [GameRecord] = []
+    let steamAccountManager = SteamAccountManager()
     @Published private(set) var prefixes: [PrefixRecord] = []
     @Published private(set) var compatibilityProfiles: [CompatibilityProfile] = []
     @Published private(set) var runtimeDescriptor: RuntimeDescriptor = .defaultDescriptor
@@ -1410,6 +1411,40 @@ final class AppViewModel: ObservableObject {
             }
             await refresh()
             await LibraryArtwork.shared.prepare([importedGame])
+        }
+    }
+
+    /// Root directory for games installed through the Steam tab.
+    var steamLibrariesRootPath: String {
+        IridiumStore.defaultManagedRootURL().appending(path: "SteamLibrary", directoryHint: .isDirectory).path
+    }
+
+    /// Wires the Steam pipeline's completion callback into the game library. Idempotent; call
+    /// once (e.g. from the library view's `onAppear`).
+    func configureSteamIntegrationIfNeeded() {
+        guard steamAccountManager.onGameInstalled == nil else { return }
+        steamAccountManager.onGameInstalled = { [weak self] execution, plan in
+            guard let self else { return }
+            Task { @MainActor in
+                let compatibility = BuiltInCompatibilityProfiles.recommendedCompatibilityProfile(forTitle: execution.title)
+                _ = await self.store.registerSteamGame(
+                    title: execution.title,
+                    appID: execution.appID,
+                    installPath: execution.targetPath,
+                    executablePath: plan.primaryExecutable,
+                    compatibilityProfileName: compatibility.slug,
+                    inputProfileName: self.defaultInputProfileName(for: compatibility),
+                    deviceTier: compatibility.minimumDeviceTier,
+                    rendererPreset: compatibility.recommendedRenderer,
+                    launchArguments: [],
+                    titleFlags: [],
+                    managedArtifactIdentifier: nil,
+                    executableFingerprint: nil,
+                    runtimeBundleIdentifier: self.hostCapabilities.selectedRuntimeBundle?.id,
+                    runtimeBundleVersion: self.hostCapabilities.selectedRuntimeBundle?.version
+                )
+                await self.refresh()
+            }
         }
     }
 
