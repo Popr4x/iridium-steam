@@ -7,7 +7,8 @@ import re
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
-REPO = 'intraducine/iridium'
+# See the matching comment in dispatch-build.py.
+REPO = os.environ.get('GITHUB_REPOSITORY', 'intraducine/iridium')
 INPUTS = ('iridium-wine-ios', 'ci/prepare-linux-runtime.sh', 'ci/collect-debian-sources.py')
 
 

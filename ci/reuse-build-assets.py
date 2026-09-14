@@ -8,7 +8,11 @@ import re
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
-REPO = 'intraducine/iridium'
+# See the matching comment in dispatch-build.py: reuse must only ever trust
+# artifacts produced by this same repository's own workflow runs, so this
+# tracks whichever repo the workflow is actually running in rather than
+# always the canonical upstream.
+REPO = os.environ.get('GITHUB_REPOSITORY', 'intraducine/iridium')
 WORKFLOW = '.github/workflows/build-unsigned-ipa.yml'
 MEDIA_INPUTS = ('ci/prepare-media-sdk.sh', 'ci/fetch-runtime-inputs.py',
                 'ci/check-media-toolchain.py',

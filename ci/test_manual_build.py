@@ -165,6 +165,13 @@ class ManualBuildTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/build-unsigned-ipa.yml").read_text()
         self.assertLess(workflow.index("ci/dispatch-build.py --check"), workflow.index("ci/reuse-build-assets.py"))
 
+    def test_repo_follows_github_repository_env_with_canonical_fallback(self):
+        import os
+        self.assertEqual(dispatch.REPO, "intraducine/iridium")
+        with patch.dict(os.environ, {"GITHUB_REPOSITORY": "someuser/some-fork"}):
+            forked = load("dispatch_build_forked", "dispatch-build.py")
+            self.assertEqual(forked.REPO, "someuser/some-fork")
+
     def test_pinned_graphics_tools_bootstrap_before_sync(self):
         script = (ROOT / "ci/prepare-graphics.sh").read_text()
         self.assertLess(script.index('export DEPOT_TOOLS_UPDATE=0'), script.index('"$DEPOT/ensure_bootstrap"'))

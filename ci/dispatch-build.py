@@ -9,7 +9,11 @@ import time
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
-REPO = "intraducine/iridium"
+# GitHub Actions always sets GITHUB_REPOSITORY to the repo the workflow is
+# actually running in; outside Actions (a local dispatch), fall back to the
+# canonical repo. This lets the same script dispatch and reuse builds
+# correctly on a fork instead of always targeting the upstream repo.
+REPO = os.environ.get("GITHUB_REPOSITORY", "intraducine/iridium")
 WORKFLOW = "build-unsigned-ipa.yml"
 
 
