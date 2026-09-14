@@ -1,4 +1,7 @@
+import json
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 from test_manual_build import load
 
 reuse = load('linux_reuse', 'verify-linux-reuse.py')
@@ -28,6 +31,17 @@ class LinuxReuseTests(unittest.TestCase):
         reuse.validate_run(run, jobs, revision, 'feature')
         with self.assertRaises(ValueError):
             reuse.validate_run(run, jobs, revision, 'different-branch')
+        reuse.validate_run(run, jobs, revision, 'different-branch', allow_other_branch=True)
+
+    def test_merged_branch_revision_must_be_an_ancestor(self):
+        revision = 'a' * 40
+        current = 'b' * 40
+        comparison = json.dumps({'merge_base_commit': {'sha': revision}})
+        with patch.object(reuse.subprocess, 'check_output', side_effect=[current, comparison]):
+            self.assertTrue(reuse.producer_revision_is_ancestor(Path('.'), revision))
+        comparison = json.dumps({'merge_base_commit': {'sha': 'c' * 40}})
+        with patch.object(reuse.subprocess, 'check_output', side_effect=[current, comparison]):
+            self.assertFalse(reuse.producer_revision_is_ancestor(Path('.'), revision))
 
 
 class UserlandStageTests(unittest.TestCase):
@@ -35,7 +49,6 @@ class UserlandStageTests(unittest.TestCase):
         import io
         import tarfile
         import tempfile
-        from pathlib import Path
         from unittest.mock import patch
         stage = load('stage_linux_userland', 'stage-linux-userland.py')
         with tempfile.TemporaryDirectory() as temp:

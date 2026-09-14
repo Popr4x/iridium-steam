@@ -102,13 +102,14 @@ def producer_job(text, stage):
                      if not line.startswith(('    if:', '    needs:')))
 
 
-def validate(run, jobs, stage, branch):
+def validate(run, jobs, stage, branch, allow_other_branch=False):
     revision = run.get('head_sha', '')
     if not re.fullmatch('[0-9a-f]{40}', revision):
         raise ValueError('Invalid producer revision')
     if stage == 'linux-userland':
-        linux.validate_run(run, jobs, revision, branch)
-    elif (run.get('event') != 'workflow_dispatch' or run.get('head_branch') not in ('main', branch)
+        linux.validate_run(run, jobs, revision, branch, allow_other_branch=allow_other_branch)
+    elif (run.get('event') != 'workflow_dispatch'
+          or (run.get('head_branch') not in ('main', branch) and not allow_other_branch)
           or run.get('path') != WORKFLOW
           or run.get('head_repository', {}).get('full_name') != REPO
           or not any(
@@ -118,7 +119,7 @@ def validate(run, jobs, stage, branch):
               if stage == 'native-runtime' or stage in COMPONENT_INPUTS else
               (j.get('name') == stage and j.get('conclusion') == 'success')
               for j in jobs)):
-        raise ValueError('Producer must have completed its artifact stage on main or this branch')
+        raise ValueError('Producer must have completed its artifact stage on trusted current history')
     return revision
 
 
@@ -156,11 +157,26 @@ def artifact_name(stage):
     return 'media-sdk-with-source' if stage == 'media' else 'linux-runtime-with-source'
 
 
+def can_reuse_run(run_id):
+    current = os.environ.get('GITHUB_RUN_ID', '')
+    if str(run_id) != current:
+        return True
+    attempt = os.environ.get('GITHUB_RUN_ATTEMPT', '1')
+    return attempt.isdigit() and int(attempt) > 1
+
+
 def verify_producer(root, run_id, stage, branch):
     if not re.fullmatch('[0-9]{1,20}', str(run_id)):
         raise ValueError('Invalid producer run ID')
     path = 'actions/runs/' + str(run_id)
-    revision = validate(api(path), api(path + '/jobs?per_page=100')['jobs'], stage, branch)
+    run = api(path)
+    # Reruns keep the same workflow run ID. Inspect all attempts so a successful
+    # retained artifact from an earlier attempt can satisfy producer validation.
+    jobs = api(path + '/jobs?filter=all&per_page=100')['jobs']
+    other_branch = run.get('head_branch') not in ('main', branch)
+    revision = validate(run, jobs, stage, branch, allow_other_branch=other_branch)
+    if other_branch and not linux.producer_revision_is_ancestor(root, revision):
+        raise ValueError('Producer revision is not an ancestor of the current build')
     name = artifact_name(stage)
     artifacts = api(path + '/artifacts?per_page=100')['artifacts']
     matching = [a for a in artifacts if a['name'] == name and not a['expired']]
@@ -185,8 +201,7 @@ def select(root, stage, branch, explicit=''):
                 run = artifact.get('workflow_run', {})
                 run_id = str(run.get('id', ''))
                 if (artifact.get('expired') or not run_id or run_id in checked
-                        or run_id == os.environ.get('GITHUB_RUN_ID')
-                        or run.get('head_branch') not in ('main', branch)):
+                        or not can_reuse_run(run_id)):
                     continue
                 checked.add(run_id)
                 try:
@@ -199,13 +214,12 @@ def select(root, stage, branch, explicit=''):
             page += 1
     runs = api('actions/workflows/build-unsigned-ipa.yml/runs?event=workflow_dispatch&per_page=30')['workflow_runs']
     for run in runs:
-        if str(run['id']) == os.environ.get('GITHUB_RUN_ID'):
-            continue
-        if run.get('head_branch') not in ('main', branch):
+        run_id = str(run['id'])
+        if not can_reuse_run(run_id):
             continue
         try:
-            verify_producer(root, str(run['id']), stage, branch)
-            return str(run['id'])
+            verify_producer(root, run_id, stage, branch)
+            return run_id
         except ValueError as error:
             print(f"Skip {stage} run {run['id']}: {error}")
     return ''

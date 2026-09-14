@@ -31,7 +31,7 @@ def verify(framework):
                          'let script = StikJIT.Script.universal\n'
                          'let paths = DDIPaths(imagePath: "", trustcachePath: "", manifestPath: "")\n')
         sdk = subprocess.check_output(['xcrun', '--sdk', 'iphoneos', '--show-sdk-path'], text=True).strip()
-        subprocess.run(['xcrun', 'swiftc', '-typecheck', '-target', 'arm64-apple-ios27.0',
+        subprocess.run(['xcrun', 'swiftc', '-typecheck', '-target', 'arm64-apple-ios18.0',
                         '-sdk', sdk, '-F', str(root), '-module-cache-path', str(root / 'cache'),
                         str(probe)], check=True)
 

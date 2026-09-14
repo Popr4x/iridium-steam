@@ -16,5 +16,18 @@ for arch in arm64ec aarch64; do
     done
 done
 
+# Wine's build-tree PE modules contain DWARF debug sections. They are useful to
+# developers but are not read by the Windows runtime, and retaining them makes
+# the app bundle several times larger. Strip debug data only; keep PE code,
+# exports, resources, relocations, and unwind information intact.
+objcopy="$(command -v llvm-objcopy)"
+for arch in arm64ec aarch64; do
+    while IFS= read -r -d '' module; do
+        if [ "$(head -c 2 "$module")" = "MZ" ]; then
+            "$objcopy" --strip-debug "$module"
+        fi
+    done < <(find "$APP/$arch-windows" -type f -print0)
+done
+
 cp "$ROOT/.build/prefix-transfer/prefix-template.tar.gz" "$APP/prefix-template.tar.gz"
 python3 "$ROOT/ci/stage-windows-runtime.py" --check "$APP"
