@@ -43,7 +43,7 @@ final class BuiltinJIT: NSObject, JITHost {
     func start(onListening: @escaping () -> Void, report: @escaping (String) -> Void, onUnavailable: (() -> Void)? = nil) -> Bool {
         dispatchPrecondition(condition: .onQueue(.main))
         guard launcher == nil else { report("Restart Iridium before another built-in JIT attempt."); return false }
-        guard #available(iOS 27, *) else { report("Built-in JIT requires iOS 27 or later."); return false }
+        guard #available(iOS 26, *) else { report("Built-in JIT requires iOS 26 or later."); return false }
         guard !Self.isHosted else { report("Built-in JIT requires standalone Iridium. Select external StikDebug in LiveContainer."); return false }
         guard IRHasDebugEntitlement() else { report("This installation lacks debugging permission. Sign Iridium with get-task-allow."); return false }
         guard !jit_check_debugged() else { report("A debugger is already attached. Restart Iridium without Xcode before using built-in JIT."); return false }
