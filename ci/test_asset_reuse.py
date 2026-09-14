@@ -79,6 +79,26 @@ class AssetReuseTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             reuse.validate(run, [], 'media', 'feature')
 
+    def test_merged_branch_producer_is_checked_as_current_history(self):
+        revision = 'a' * 40
+        run = {'id': 123, 'event': 'workflow_dispatch', 'head_branch': 'merged-feature',
+               'head_sha': revision, 'path': reuse.WORKFLOW,
+               'head_repository': {'full_name': reuse.REPO}}
+        jobs = {'jobs': [{'name': 'media', 'conclusion': 'success'}]}
+        artifacts = {'artifacts': [{'name': 'media-sdk-with-source', 'expired': False}]}
+        with patch.object(reuse, 'api', side_effect=[run, jobs, artifacts]), \
+             patch.object(reuse.linux, 'producer_revision_is_ancestor', return_value=True), \
+             patch.object(reuse, 'compatible'):
+            self.assertEqual(reuse.verify_producer(Path('.'), '123', 'media', 'feature'), revision)
+        with patch.object(reuse, 'api', side_effect=[run, jobs]), \
+             patch.object(reuse.linux, 'producer_revision_is_ancestor', return_value=False):
+            with self.assertRaisesRegex(ValueError, 'ancestor'):
+                reuse.verify_producer(Path('.'), '123', 'media', 'feature')
+        with patch.object(reuse, 'api', return_value={'workflow_runs': [run]}), \
+             patch.object(reuse, 'verify_producer', return_value=revision) as verify:
+            self.assertEqual(reuse.select(Path('.'), 'media', 'feature'), '123')
+            verify.assert_called_once_with(Path('.'), '123', 'media', 'feature')
+
     def test_input_and_producer_changes_invalidate_but_ui_does_not(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
